@@ -78,6 +78,123 @@
 </style>
 </head>
 <body>
+	<!-- === APP NAVIGATION LAYOUT v2 (animated + mobile-friendly) === -->
+<style>
+  :root {
+    --bg:#0b0b14;
+    --ink:#e0e0ff;
+    --accent:#7afcff;
+    --accent-dim:#4fd4ff;
+  }
+
+  body {
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:system-ui,sans-serif;
+    overflow-x:hidden;
+  }
+
+  /* TAB PANELS */
+  .tabPanel {
+    display:none;
+    opacity:0;
+    transform:translateY(10px);
+    transition:opacity .35s ease, transform .35s ease;
+    padding:12px;
+    min-height:calc(100vh - 70px);
+  }
+  .tabPanel.active {
+    display:block;
+    opacity:1;
+    transform:translateY(0);
+  }
+
+  /* NAV BAR */
+  #navBar {
+    position:fixed;
+    bottom:0; left:0; right:0;
+    height:58px;
+    background:#0f1122;
+    border-top:1px solid #202a60;
+    display:flex; justify-content:space-around; align-items:center;
+    z-index:1000;
+  }
+
+  #navBar button {
+    flex:1;
+    background:none; border:none; outline:none;
+    color:var(--accent-dim);
+    font-size:.9rem; font-weight:600;
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    cursor:pointer; padding:4px 0;
+    transition:color .25s ease, transform .25s ease;
+  }
+
+  #navBar button.active {
+    color:var(--accent);
+    transform:translateY(-2px);
+  }
+
+  #navBar button span.icon {
+    font-size:1.3rem;
+  }
+
+  /* Desktop: move nav to top */
+  @media (min-width:700px){
+    #navBar {
+      top:0; bottom:auto; border-top:none; border-bottom:1px solid #202a60;
+      height:auto; padding:6px 0;
+    }
+    .tabPanel { min-height:calc(100vh - 60px); }
+  }
+</style>
+
+<!-- === TABS CONTAINERS === -->
+<div id="tasksTab" class="tabPanel active">
+  <!-- 🏠 DAILY TASKS + AVATAR + CHECKLIST -->
+  <!-- move your existing tracker code here -->
+</div>
+
+<div id="gameTab" class="tabPanel">
+  <!-- ⚔️ BATTLE ARENA -->
+  <!-- move the entire <div id="gamePanel"> … </div> and its <script> here -->
+</div>
+
+<div id="statsTab" class="tabPanel">
+  <!-- 📊 STATS / MOOD / GOALS / SKILLS -->
+</div>
+
+<!-- === MOBILE / DESKTOP NAVIGATION BAR === -->
+<div id="navBar">
+  <button data-tab="tasksTab" class="active"><span class="icon">🏠</span>Tasks</button>
+  <button data-tab="gameTab"><span class="icon">⚔️</span>Battle</button>
+  <button data-tab="statsTab"><span class="icon">📊</span>Stats</button>
+</div>
+
+<script>
+/* === TAB SWITCHING LOGIC with persistence === */
+const navButtons = document.querySelectorAll('#navBar button');
+const panels = document.querySelectorAll('.tabPanel');
+
+function openTab(tabId){
+  navButtons.forEach(b=>b.classList.toggle('active', b.dataset.tab===tabId));
+  panels.forEach(p=>p.classList.toggle('active', p.id===tabId));
+  localStorage.setItem('activeTab', tabId);
+  // optional: pause game canvas when hidden
+  if(typeof pauseGame==='function'){
+    pauseGame(tabId!=='gameTab');
+  }
+}
+
+navButtons.forEach(btn=>{
+  btn.addEventListener('click', ()=> openTab(btn.dataset.tab));
+});
+
+// restore last tab
+const savedTab = localStorage.getItem('activeTab');
+if(savedTab && document.getElementById(savedTab)){
+  openTab(savedTab);
+}
+</script>
 	<!-- === APP NAVIGATION LAYOUT SYSTEM === -->
 <style>
   body {
@@ -2529,124 +2646,6 @@ renderChecklists();
   requestAnimationFrame(loop);
 })();
 </script>
-</script>
 </body>
-<!-- === APP NAVIGATION LAYOUT v2 (animated + mobile-friendly) === -->
-<style>
-  :root {
-    --bg:#0b0b14;
-    --ink:#e0e0ff;
-    --accent:#7afcff;
-    --accent-dim:#4fd4ff;
-  }
-
-  body {
-    margin:0; background:var(--bg); color:var(--ink);
-    font-family:system-ui,sans-serif;
-    overflow-x:hidden;
-  }
-
-  /* TAB PANELS */
-  .tabPanel {
-    display:none;
-    opacity:0;
-    transform:translateY(10px);
-    transition:opacity .35s ease, transform .35s ease;
-    padding:12px;
-    min-height:calc(100vh - 70px);
-  }
-  .tabPanel.active {
-    display:block;
-    opacity:1;
-    transform:translateY(0);
-  }
-
-  /* NAV BAR */
-  #navBar {
-    position:fixed;
-    bottom:0; left:0; right:0;
-    height:58px;
-    background:#0f1122;
-    border-top:1px solid #202a60;
-    display:flex; justify-content:space-around; align-items:center;
-    z-index:1000;
-  }
-
-  #navBar button {
-    flex:1;
-    background:none; border:none; outline:none;
-    color:var(--accent-dim);
-    font-size:.9rem; font-weight:600;
-    display:flex; flex-direction:column; align-items:center; gap:3px;
-    cursor:pointer; padding:4px 0;
-    transition:color .25s ease, transform .25s ease;
-  }
-
-  #navBar button.active {
-    color:var(--accent);
-    transform:translateY(-2px);
-  }
-
-  #navBar button span.icon {
-    font-size:1.3rem;
-  }
-
-  /* Desktop: move nav to top */
-  @media (min-width:700px){
-    #navBar {
-      top:0; bottom:auto; border-top:none; border-bottom:1px solid #202a60;
-      height:auto; padding:6px 0;
-    }
-    .tabPanel { min-height:calc(100vh - 60px); }
-  }
-</style>
-
-<!-- === TABS CONTAINERS === -->
-<div id="tasksTab" class="tabPanel active">
-  <!-- 🏠 DAILY TASKS + AVATAR + CHECKLIST -->
-  <!-- move your existing tracker code here -->
-</div>
-
-<div id="gameTab" class="tabPanel">
-  <!-- ⚔️ BATTLE ARENA -->
-  <!-- move the entire <div id="gamePanel"> … </div> and its <script> here -->
-</div>
-
-<div id="statsTab" class="tabPanel">
-  <!-- 📊 STATS / MOOD / GOALS / SKILLS -->
-</div>
-
-<!-- === MOBILE / DESKTOP NAVIGATION BAR === -->
-<div id="navBar">
-  <button data-tab="tasksTab" class="active"><span class="icon">🏠</span>Tasks</button>
-  <button data-tab="gameTab"><span class="icon">⚔️</span>Battle</button>
-  <button data-tab="statsTab"><span class="icon">📊</span>Stats</button>
-</div>
-
-<script>
-/* === TAB SWITCHING LOGIC with persistence === */
-const navButtons = document.querySelectorAll('#navBar button');
-const panels = document.querySelectorAll('.tabPanel');
-
-function openTab(tabId){
-  navButtons.forEach(b=>b.classList.toggle('active', b.dataset.tab===tabId));
-  panels.forEach(p=>p.classList.toggle('active', p.id===tabId));
-  localStorage.setItem('activeTab', tabId);
-  // optional: pause game canvas when hidden
-  if(typeof pauseGame==='function'){
-    pauseGame(tabId!=='gameTab');
-  }
-}
-
-navButtons.forEach(btn=>{
-  btn.addEventListener('click', ()=> openTab(btn.dataset.tab));
-});
-
-// restore last tab
-const savedTab = localStorage.getItem('activeTab');
-if(savedTab && document.getElementById(savedTab)){
-  openTab(savedTab);
-}
-</script>
 </html>
 
