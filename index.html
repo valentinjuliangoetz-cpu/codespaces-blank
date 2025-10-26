@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0b0f">
+  <title>Ascendant RPG</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="appbar">
+  <div class="left">
+    <h1>⚔️ Ascendant RPG</h1>
+    <div id="dayStamp" class="muted"></div>
+  </div>
+  <div class="right">
+    <button id="installBtn" hidden>Install</button>
+  </div>
+</header>
+
+<main>
+  <section class="card avatar">
+    <div class="row">
+      <div>
+        <h2 id="charName">Valentin — The Ascendant</h2>
+        <div id="charLevel" class="muted">Level 1 • 0 XP</div>
+        <div id="streakLine" class="muted">Global Streak: 0 🔥</div>
+      </div>
+      <div class="xpbar">
+        <div id="globalXP" class="xpfill" style="width:0%"></div>
+      </div>
+    </div>
+    <div class="avatarWrap">
+      <div id="avatarArt" class="avatarArt">🧍</div>
+      <div id="traits" class="traits"></div>
+    </div>
+  </section>
+
+  <section class="card boss">
+    <h3>🛡️ Daily Boss Challenge</h3>
+    <div id="bossText" class="muted">Generating...</div>
+    <div class="row gap">
+      <button id="rerollBoss">Reroll</button>
+      <button id="completeBoss">Complete (+3 XP)</button>
+      <span id="bossStatus" class="badge" style="display:none"></span>
+    </div>
+    <p class="muted small">One high-effort challenge per day. Completing it grants +3 XP to the boss’s stat.</p>
+  </section>
+
+  <section id="stats" class="stats"></section>
+
+  <section class="card">
+    <h3>30-Day Journey</h3>
+    <div id="grid" class="grid"></div>
+    <div class="row gap">
+      <button id="resetToday">Reset Today</button>
+      <button id="exportBtn">Export (JSON)</button>
+      <button id="exportCsvBtn">Export CSV</button>
+      <label class="import">
+        <input type="file" id="importFile" accept=".json"> Import JSON
+      </label>
+      <span id="comboBadge" class="badge" style="display:none">Combo ready: all stats active today! +1 XP to each stat</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>Weekly XP Chart</h3>
+    <canvas id="xpChart" width="800" height="320"></canvas>
+  </section>
+
+  <section class="card">
+    <h3>Customize Tasks</h3>
+    <div id="customize"></div>
+  </section>
+
+  <section class="card">
+    <h3>🏆 Achievements</h3>
+    <div id="achievements" class="achievements"></div>
+  </section>
+
+  <section class="card info">
+    <h3>How leveling works</h3>
+    <p>Each checked habit = +1 XP in its stat. Level thresholds per stat: 0–19 = Lv1, 20–39 = Lv2, 40–59 = Lv3, 60–79 = Lv4, 80+ = Lv5.</p>
+    <p>Combo: If every stat has at least one task checked today, you get +1 XP in every stat (once per day).</p>
+    <p>Boss: Complete the Daily Boss to get +3 XP in the boss’s stat.</p>
+  </section>
+</main>
+
+<footer class="footer muted">
+  Built for daily, real-life energy mastery. Works offline after install.
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
