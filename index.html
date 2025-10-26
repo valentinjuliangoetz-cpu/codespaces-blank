@@ -1550,231 +1550,870 @@ renderGoals();
 /* ---- Re-render checklists now that we overrode it (so badges show) ---- */
 renderChecklists();
 </script>
-<!-- === ADD-ON: Pixel Auto-Battle Game (Option B) === -->
+<!-- === REPLACEMENT: Pixel Battle Arena v2 (refined visuals + manual controls + aura) === -->
 <style>
   #gamePanel{
-    margin-top:18px; background:#0f1122; border:1px solid #202a60;
-    border-radius:12px; padding:14px; text-align:left;
-    max-width:1080px; margin-left:auto; margin-right:auto;
+    margin-top:18px; background:#0f1122; border:1px solid #202a60; border-radius:12px;
+    padding:14px; text-align:left; max-width:1080px; margin-left:auto; margin-right:auto;
   }
-  #battleCanvas{background:#000; border:1px solid #202a60; width:100%; height:300px; image-rendering:pixelated}
-  #battleHUD{margin-top:8px; display:flex; justify-content:space-between; align-items:center; font-size:.95rem}
-  #battleHUD span{background:#0e1130; border:1px solid #202a60; border-radius:8px; padding:4px 8px}
-  #battleLog{margin-top:6px; max-height:80px; overflow-y:auto; font-size:.85rem; line-height:1.3}
+  #gamePanel h3{color:#7afcff;margin:0 0 8px}
+  #battleCanvas{background:#000; border:1px solid #202a60; width:100%; height:360px; image-rendering:pixelated}
+  #battleHUD{margin-top:8px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:.95rem}
+  #battleHUD .chip{background:#0e1130; border:1px solid #202a60; border-radius:8px; padding:4px 8px}
+  #controls{margin-top:8px; display:flex; flex-wrap:wrap; gap:8px; align-items:center}
+  #controls .btn{background:#7afcff; color:#000; border:none; border-radius:10px; padding:6px 10px; font-weight:700; cursor:pointer}
+  #controls .btn.alt{background:#ffd700}
+  #controls .btn.ghost{background:#0e1130; color:#e0e0ff; border:1px solid #202a60}
+  #controls input[type="number"], #controls input[type="range"], #controls select{
+    background:#0e1130; color:#e0e0ff; border:1px solid #202a60; border-radius:8px; padding:4px 8px
+  }
+  #battleLog{margin-top:8px; max-height:92px; overflow-y:auto; font-size:.85rem; line-height:1.25; background:#0e1130; border:1px solid #202a60; border-radius:8px; padding:6px}
+  .hpbar {height:10px; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:4px; width:160px; overflow:hidden}
+  .hpfill {height:100%; background:linear-gradient(90deg,#35ff9b,#10c777)}
 </style>
 
 <div id="gamePanel" class="panel">
   <h3>🧟 Pixel Battle Arena</h3>
-  <canvas id="battleCanvas" width="600" height="300"></canvas>
+
+  <canvas id="battleCanvas" width="640" height="360"></canvas>
+
   <div id="battleHUD">
-    <span>💪 Power: <span id="powerDisplay">0</span></span>
-    <span>⚔️ Zombies Defeated: <span id="killCount">0</span></span>
+    <span class="chip">💪 Power: <span id="powerDisplay">0</span></span>
+    <span class="chip">⚔️ Kills: <span id="killCount">0</span></span>
+    <span class="chip">🛡️ HP:</span>
+    <div class="hpbar"><div id="hpFill" class="hpfill" style="width:100%"></div></div>
+    <span class="chip">👾 Alive: <span id="aliveCount">0</span></span>
   </div>
+
+  <div id="controls">
+    <label class="chip"><input type="checkbox" id="autoAttack" checked> Auto-Attack</label>
+    <button id="attackBtn" class="btn">Strike (Space)</button>
+    <button id="pauseBtn" class="btn alt">Pause</button>
+    <button id="spawnBossBtn" class="btn ghost">Spawn Boss</button>
+
+    <label class="chip">Difficulty
+      <select id="difficulty">
+        <option value="easy">Easy</option>
+        <option value="normal" selected>Normal</option>
+        <option value="hard">Hard</option>
+      </select>
+    </label>
+
+    <label class="chip">Atk speed
+      <input id="atkSpeed" type="range" min="0.4" max="2.0" step="0.1" value="1.0">
+    </label>
+
+    <label class="chip">Power scale (XP ÷)
+      <input id="scaleIn" type="number" min="10" max="10000" value="100" style="width:90px">
+    </label>
+
+    <label class="chip"><input type="checkbox" id="sfxOn" checked> SFX</label>
+  </div>
+
   <div id="battleLog"></div>
 </div>
 
 <script>
-/* =========================
-   Pixel Auto-Battle Mini-Game
-========================= */
-const cvs=document.getElementById('battleCanvas');
-const ctx=cvs.getContext('2d');
-let width=cvs.width, height=cvs.height;
+/* =======================================================
+   Pixel Battle Arena v2 — integrated visuals + aura + controls
+   Uses your global `xp` variable from the tracker.
+======================================================= */
+(() => {
+  const cvs = document.getElementById('battleCanvas');
+  const ctx = cvs.getContext('2d');
 
-// Game state
-let player={x:60,y:height-60,hp:100,atk:1,cd:0};
-let zombies=[];
-let spawnTimer=0;
-let kills=0;
-let lastT=0;
-let scaleFactor=100; // damage scaling: every 100 real XP = +1 dmg
-const logBox=document.getElementById('battleLog');
+  // DOM
+  const powerEl = document.getElementById('powerDisplay');
+  const killsEl = document.getElementById('killCount');
+  const aliveEl = document.getElementById('aliveCount');
+  const hpFill  = document.getElementById('hpFill');
+  const logBox  = document.getElementById('battleLog');
 
-function log(msg){
-  const line=document.createElement('div');
-  line.textContent=msg;
-  logBox.appendChild(line);
-  logBox.scrollTop=logBox.scrollHeight;
-}
+  const autoAttackEl = document.getElementById('autoAttack');
+  const attackBtn    = document.getElementById('attackBtn');
+  const pauseBtn     = document.getElementById('pauseBtn');
+  const bossBtn      = document.getElementById('spawnBossBtn');
+  const diffSel      = document.getElementById('difficulty');
+  const atkSpeedEl   = document.getElementById('atkSpeed');
+  const scaleIn      = document.getElementById('scaleIn');
+  const sfxEl        = document.getElementById('sfxOn');
 
-// Update attack power from real XP
-function updatePower(){
-  const power=Math.max(1, Math.floor(xp/scaleFactor));
-  player.atk=power;
-  document.getElementById('powerDisplay').textContent=power;
-}
+  // Game state
+  let W = cvs.width, H = cvs.height;
+  let running = true;
+  let lastT = performance.now();
+  let kills = 0;
 
-// Spawn zombie
-function spawnZombie(){
-  zombies.push({x:width-40,y:height-60,hp:20+Math.random()*20,spd:0.3+Math.random()*0.2});
-}
+  // Player
+  const player = {
+    x: 80, y: H-56, w: 28, h: 40,
+    vx: 0, speed: 1.4,
+    hp: 100, hpMax: 100,
+    atk: 1,  // updated from real XP
+    cd: 0,   // attack cooldown
+    cdBase: 42, // lower = faster (in frames). Scaled by atkSpeed control.
+    dashCd: 0
+  };
 
-// Draw entities (simple pixel rectangles)
-function drawRect(x,y,w,h,color){
-  ctx.fillStyle=color;
-  ctx.fillRect(Math.floor(x),Math.floor(y),w,h);
-}
+  // Enemies
+  let zombies = [];
+  let spawnTimer = 0;
+  const spawnBase = 180; // frames baseline; modified by difficulty
+  const waveScale = () => ({
+    easy:   {hp: 1.0, spd: 1.0, freq: 1.2},
+    normal: {hp: 1.4, spd: 1.05, freq: 1.0},
+    hard:   {hp: 1.9, spd: 1.1,  freq: 0.8}
+  })[diffSel.value];
 
-// Game loop
-function step(ts){
-  const dt=(ts-lastT)/16.6; lastT=ts;
-  ctx.clearRect(0,0,width,height);
-  updatePower();
+  // Particles & damage text
+  let particles = [];
+  let floaters = [];
 
-  // Draw ground
-  ctx.fillStyle="#111"; ctx.fillRect(0,height-30,width,30);
+  // Audio (tiny blips, offline)
+  let AC = null; let master = null;
+  function ensureAudio(){ if(AC) return; AC = new (window.AudioContext||window.webkitAudioContext)(); master = AC.createGain(); master.gain.value = 0.25; master.connect(AC.destination); }
+  function blip(freq=440, dur=0.07, vol=0.15){
+    if(!sfxEl.checked) return;
+    ensureAudio();
+    const t=AC.currentTime;
+    const o=AC.createOscillator(); const g=AC.createGain();
+    o.type='square'; o.frequency.value=freq;
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(vol,t+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g).connect(master); o.start(); o.stop(t+dur+0.01);
+  }
 
-  // Player cooldown
-  player.cd=Math.max(0,player.cd-dt);
+  // Utils
+  function log(msg){
+    const line=document.createElement('div');
+    line.textContent = msg;
+    logBox.appendChild(line);
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+  function drawRect(x,y,w,h,color){ ctx.fillStyle=color; ctx.fillRect(Math.floor(x),Math.floor(y),w,h); }
 
-  // Spawn timer
-  spawnTimer-=dt;
-  if(spawnTimer<=0){ spawnZombie(); spawnTimer=200+Math.random()*100; }
+  // Visuals: parallax sky + stars
+  const stars = Array.from({length:40}, ()=>({x:Math.random()*W, y:Math.random()*H*0.6, s:1+Math.random()*2, spd:.1+Math.random()*0.4}));
+  function drawBackground(dt){
+    // gradient sky
+    const grd = ctx.createLinearGradient(0,0,0,H);
+    grd.addColorStop(0,"#081026");
+    grd.addColorStop(1,"#04060f");
+    ctx.fillStyle = grd; ctx.fillRect(0,0,W,H);
 
-  // Move zombies
-  for(let z of zombies){ z.x-=z.spd*dt*10; }
+    // stars parallax
+    ctx.fillStyle = "#9bc9ff";
+    for (let st of stars){
+      st.x -= st.spd*dt;
+      if (st.x < 0) st.x += W;
+      ctx.fillRect(st.x, st.y, st.s, st.s);
+    }
 
-  // Attack nearest zombie
-  const target=zombies.find(z=>z.x<150);
-  if(target && player.cd<=0){
-    target.hp-=player.atk;
-    player.cd=40; // attack speed
-    ctx.fillStyle="#ff0";
-    ctx.fillRect(player.x+40,player.y-20,10,10);
-    log(`🗡️ Hit for ${player.atk} dmg`);
-    if(target.hp<=0){
-      kills++;
-      document.getElementById('killCount').textContent=kills;
-      zombies=zombies.filter(z=>z!==target);
-      log(`💀 Zombie defeated!`);
+    // ground tiles
+    for (let x=0; x<W; x+=16){
+      ctx.fillStyle = (Math.floor(x/16)%2===0) ? "#0b0b12" : "#0f0f18";
+      ctx.fillRect(x, H-24, 16, 24);
     }
   }
 
-  // Draw player
-  drawRect(player.x,player.y-40,30,40,"#4af");
-  // Draw zombies
-  for(let z of zombies){ drawRect(z.x,z.y-40,30,40,"#0f0"); }
+  // Aura (XP-based)
+  function auraColor(){
+    if (xp >= 100000) return '#9cfbff';
+    if (xp >= 10000)  return '#00ffff';
+    if (xp >= 1000)   return '#ffd700';
+    return '#ffdd77';
+  }
+  function auraIntensity(){
+    if (xp >= 100000) return 1.2;
+    if (xp >= 10000)  return 0.9;
+    if (xp >= 1000)   return 0.6;
+    return 0.3;
+  }
+  function spawnAuraParticles(){
+    const amt = Math.floor(1 + 3*auraIntensity());
+    for(let i=0;i<amt;i++){
+      const ang=Math.random()*Math.PI*2;
+      const rad=18+Math.random()*26;
+      particles.push({
+        x:player.x+player.w/2+Math.cos(ang)*rad,
+        y:player.y-player.h/2+Math.sin(ang)*rad,
+        r:1+Math.random()*2,
+        life:50+Math.random()*30,
+        color:auraColor()
+      });
+    }
+  }
+  let lightningTimer=0;
+  function drawLightning(){
+    if (xp<100000) return;
+    lightningTimer-=1;
+    if (lightningTimer<=0){
+      lightningTimer=24+Math.random()*50;
+      ctx.strokeStyle='rgba(200,255,255,0.85)';
+      ctx.lineWidth=2;
+      ctx.beginPath();
+      const startX=player.x+player.w/2, startY=player.y-player.h;
+      ctx.moveTo(startX,startY);
+      let x=startX, y=startY;
+      for(let i=0;i<6;i++){
+        x+=Math.random()*12-6;
+        y+=10+Math.random()*12;
+        ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    }
+  }
+  function updateParticles(dt){
+    for(let p of particles){ p.life-=dt*2; p.y-=0.04*dt; }
+    particles = particles.filter(p=>p.life>0);
+    for(let p of particles){
+      const a=Math.min(1, p.life/50)*0.6;
+      ctx.globalAlpha=a; ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,p.r,p.r); ctx.globalAlpha=1;
+    }
+  }
 
-  requestAnimationFrame(step);
-}
-requestAnimationFrame(step);
+  // Floating damage numbers
+  function addFloater(x,y,txt,color="#ffd700"){ floaters.push({x,y,txt,life:60,color}); }
+  function drawFloaters(dt){
+    for(let f of floaters){ f.life-=dt*2; f.y-=0.4*dt; }
+    floaters = floaters.filter(f=>f.life>0);
+    ctx.font="10px monospace"; ctx.textBaseline="top";
+    for(let f of floaters){
+      ctx.fillStyle=f.color; ctx.globalAlpha=Math.max(0,f.life/60);
+      ctx.fillText(f.txt, f.x, f.y);
+      ctx.globalAlpha=1;
+    }
+  }
+
+  // Power from real XP
+  function updatePower(){
+    const scale = Math.max(10, Math.min(10000, parseInt(scaleIn.value)||100));
+    const p = Math.max(1, Math.floor(xp / scale));
+    player.atk = p;
+    powerEl.textContent = p;
+  }
+
+  // Enemy factory
+  function spawnZombie(boss=false){
+    const s = waveScale();
+    const baseHP = boss ? 300 : (22 + Math.random()*26);
+    const z = {
+      x: W-40, y: H-56, w: 30, h: 40,
+      hpMax: Math.round(baseHP * (1 + kills*0.01) * s.hp * (boss?2.5:1)),
+      hp: 0,
+      spd: (boss?0.7: (0.6+Math.random()*0.3)) * s.spd,
+      boss
+    };
+    z.hp = z.hpMax;
+    zombies.push(z);
+  }
+
+  // Spawn pacing
+  function scheduleSpawn(dt){
+    const s = waveScale();
+    spawnTimer -= dt;
+    if (spawnTimer <= 0){
+      spawnZombie(false);
+      spawnTimer = spawnBase * s.freq;
+    }
+  }
+
+  // Combat
+  function damageZombie(z, dmg){
+    z.hp -= dmg;
+    addFloater(z.x+z.w/2-4, z.y-46, String(dmg), "#ffd36b");
+    impactFlash(z.x+z.w/2, z.y-20);
+    blip(640,0.05,0.12);
+    if (z.hp <= 0){
+      kills++; killsEl.textContent = kills;
+      zombies = zombies.filter(o=>o!==z);
+      log("💀 Zombie defeated!");
+      blip(320,0.08,0.18);
+    }
+  }
+
+  // Impact effect
+  function impactFlash(x,y){
+    particles.push({x:x-5, y:y-5, r:10, life:10, color:"#fff"});
+  }
+
+  // Attack handling
+  function canAttack(){ return player.cd <= 0; }
+  function doAttack(){
+    if (!canAttack()) return;
+    const speedMul = parseFloat(atkSpeedEl.value)||1.0;
+    player.cd = player.cdBase / speedMul;
+    // hit the foremost zombie in range
+    const target = zombies.find(z=> z.x < player.x + 90);
+    if (target){
+      const dmg = player.atk;
+      damageZombie(target, dmg);
+    }
+    // swing effect
+    ctx.fillStyle="#ff0"; ctx.fillRect(player.x+player.w, player.y-26, 12, 12);
+  }
+
+  // Player damage (if zombie gets too close)
+  function zombiesBite(dt){
+    for (let z of zombies){
+      z.x -= z.spd * dt;
+      if (z.x < player.x + 20){
+        // bite tick
+        if (Math.random() < 0.02*dt){
+          const bite = z.boss ? 10 : 4;
+          player.hp = Math.max(0, player.hp - bite);
+          addFloater(player.x, player.y-46, `-${bite}`, "#ff7777");
+          blip(180,0.05,0.2);
+        }
+      }
+    }
+  }
+
+  // Simple regen if alive
+  function regen(dt){
+    if (player.hp > 0){
+      player.hp = Math.min(player.hpMax, player.hp + 0.02*dt);
+    }
+  }
+
+  // Movement (keyboard)
+  const keys = {left:false,right:false,shift:false};
+  window.addEventListener('keydown', (e)=>{
+    if (e.key === 'ArrowLeft' || e.key.toLowerCase()==='a') keys.left = true;
+    if (e.key === 'ArrowRight'|| e.key.toLowerCase()==='d') keys.right= true;
+    if (e.key === 'Shift') keys.shift = true;
+    if (e.key === ' ') { e.preventDefault(); doAttack(); }
+  });
+  window.addEventListener('keyup', (e)=>{
+    if (e.key === 'ArrowLeft' || e.key.toLowerCase()==='a') keys.left = false;
+    if (e.key === 'ArrowRight'|| e.key.toLowerCase()==='d') keys.right= false;
+    if (e.key === 'Shift') keys.shift = false;
+  });
+
+  attackBtn.addEventListener('click', doAttack);
+  pauseBtn.addEventListener('click', ()=>{
+    running = !running;
+    pauseBtn.textContent = running ? "Pause" : "Resume";
+    if (running) { lastT = performance.now(); loop(lastT); }
+  });
+  bossBtn.addEventListener('click', ()=> spawnZombie(true));
+
+  // HP bar UI
+  function updateHPUI(){
+    const pct = Math.max(0, player.hp / player.hpMax) * 100;
+    hpFill.style.width = pct.toFixed(1) + '%';
+    hpFill.style.background = pct>50 ? 'linear-gradient(90deg,#35ff9b,#10c777)'
+      : pct>25 ? 'linear-gradient(90deg,#ffd36b,#ffba3a)'
+      : 'linear-gradient(90deg,#ff6b6b,#ff3a3a)';
+  }
+
+  // Drawing entities
+  function drawPlayer(){
+    drawRect(player.x, player.y-player.h, player.w, player.h, "#4af");
+    // visor/eyes
+    drawRect(player.x+9, player.y-player.h+12, 10, 4, "#001833");
+    // aura
+    spawnAuraParticles();
+    updateParticles(1);
+    drawLightning();
+  }
+  function drawZombie(z){
+    drawRect(z.x, z.y-z.h, z.w, z.h, z.boss ? "#49b250" : "#2fbf2f");
+    // eyes
+    drawRect(z.x+8, z.y-z.h+12, 4, 4, "#011");
+    drawRect(z.x+18, z.y-z.h+12, 4, 4, "#011");
+    // hp bar
+    const bw = 30, bh = 4;
+    const pct = Math.max(0, z.hp / z.hpMax);
+    ctx.fillStyle="#331"; ctx.fillRect(z.x, z.y-z.h-8, bw, bh);
+    ctx.fillStyle=pct>0.5?"#49ff8b":pct>0.25?"#ffd36b":"#ff6b6b";
+    ctx.fillRect(z.x, z.y-z.h-8, bw*pct, bh);
+  }
+
+  // Main loop
+  function loop(t){
+    const dt = Math.min(60, (t - lastT) / (1000/60)); // normalized frames
+    lastT = t;
+
+    // Update power from real XP
+    updatePower();
+
+    // World updates
+    if (running && player.hp > 0){
+      // Movement
+      const dashMul = keys.shift ? 2.2 : 1.0;
+      if (keys.left)  player.x -= player.speed * dashMul * dt;
+      if (keys.right) player.x += player.speed * dashMul * dt;
+      player.x = Math.max(10, Math.min(W-120, player.x));
+
+      // Attack cadence
+      player.cd = Math.max(0, player.cd - dt);
+      if (autoAttackEl.checked && canAttack()) doAttack();
+
+      // Spawning / enemy AI
+      scheduleSpawn(dt);
+      zombiesBite(dt);
+      regen(dt);
+    }
+
+    // Render
+    drawBackground(dt);
+    drawPlayer();
+    zombies.forEach(z=> drawZombie(z));
+    drawFloaters(dt);
+
+    aliveEl.textContent = zombies.length;
+    updateHPUI();
+
+    // death + revive
+    if (player.hp <= 0){
+      // death text
+      ctx.fillStyle="#ff5a5a"; ctx.font="16px monospace";
+      ctx.fillText("You fell... auto-reviving in 3s", W/2-110, H/2);
+      setTimeout(()=>{ if (player.hp<=0){ player.hp=player.hpMax; player.x=80; zombies.length=0; log("❤️ Revived!"); }}, 3000);
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  // Kick off
+  requestAnimationFrame(loop);
+
+})();
 </script>
-<!-- === ADD-ON: Aura Power-Up Effects === -->
+<!-- === REPLACEMENT: Pixel Battle Arena v2 (refined visuals + manual controls + aura) === -->
+<style>
+  #gamePanel{
+    margin-top:18px; background:#0f1122; border:1px solid #202a60; border-radius:12px;
+    padding:14px; text-align:left; max-width:1080px; margin-left:auto; margin-right:auto;
+  }
+  #gamePanel h3{color:#7afcff;margin:0 0 8px}
+  #battleCanvas{background:#000; border:1px solid #202a60; width:100%; height:360px; image-rendering:pixelated}
+  #battleHUD{margin-top:8px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:.95rem}
+  #battleHUD .chip{background:#0e1130; border:1px solid #202a60; border-radius:8px; padding:4px 8px}
+  #controls{margin-top:8px; display:flex; flex-wrap:wrap; gap:8px; align-items:center}
+  #controls .btn{background:#7afcff; color:#000; border:none; border-radius:10px; padding:6px 10px; font-weight:700; cursor:pointer}
+  #controls .btn.alt{background:#ffd700}
+  #controls .btn.ghost{background:#0e1130; color:#e0e0ff; border:1px solid #202a60}
+  #controls input[type="number"], #controls input[type="range"], #controls select{
+    background:#0e1130; color:#e0e0ff; border:1px solid #202a60; border-radius:8px; padding:4px 8px
+  }
+  #battleLog{margin-top:8px; max-height:92px; overflow-y:auto; font-size:.85rem; line-height:1.25; background:#0e1130; border:1px solid #202a60; border-radius:8px; padding:6px}
+  .hpbar {height:10px; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:4px; width:160px; overflow:hidden}
+  .hpfill {height:100%; background:linear-gradient(90deg,#35ff9b,#10c777)}
+</style>
+
+<div id="gamePanel" class="panel">
+  <h3>🧟 Pixel Battle Arena</h3>
+
+  <canvas id="battleCanvas" width="640" height="360"></canvas>
+
+  <div id="battleHUD">
+    <span class="chip">💪 Power: <span id="powerDisplay">0</span></span>
+    <span class="chip">⚔️ Kills: <span id="killCount">0</span></span>
+    <span class="chip">🛡️ HP:</span>
+    <div class="hpbar"><div id="hpFill" class="hpfill" style="width:100%"></div></div>
+    <span class="chip">👾 Alive: <span id="aliveCount">0</span></span>
+  </div>
+
+  <div id="controls">
+    <label class="chip"><input type="checkbox" id="autoAttack" checked> Auto-Attack</label>
+    <button id="attackBtn" class="btn">Strike (Space)</button>
+    <button id="pauseBtn" class="btn alt">Pause</button>
+    <button id="spawnBossBtn" class="btn ghost">Spawn Boss</button>
+
+    <label class="chip">Difficulty
+      <select id="difficulty">
+        <option value="easy">Easy</option>
+        <option value="normal" selected>Normal</option>
+        <option value="hard">Hard</option>
+      </select>
+    </label>
+
+    <label class="chip">Atk speed
+      <input id="atkSpeed" type="range" min="0.4" max="2.0" step="0.1" value="1.0">
+    </label>
+
+    <label class="chip">Power scale (XP ÷)
+      <input id="scaleIn" type="number" min="10" max="10000" value="100" style="width:90px">
+    </label>
+
+    <label class="chip"><input type="checkbox" id="sfxOn" checked> SFX</label>
+  </div>
+
+  <div id="battleLog"></div>
+</div>
+
 <script>
-/* =========================
-   Aura visual effects (XP-based)
-========================= */
-let particles = [];
+/* =======================================================
+   Pixel Battle Arena v2 — integrated visuals + aura + controls
+   Uses your global `xp` variable from the tracker.
+======================================================= */
+(() => {
+  const cvs = document.getElementById('battleCanvas');
+  const ctx = cvs.getContext('2d');
 
-// pick aura color by XP
-function auraColor(){
-  if (xp >= 100000) return '#9cfbff';
-  if (xp >= 10000)  return '#00ffff';
-  if (xp >= 1000)   return '#ffd700';
-  return '#ffdd77';
-}
+  // DOM
+  const powerEl = document.getElementById('powerDisplay');
+  const killsEl = document.getElementById('killCount');
+  const aliveEl = document.getElementById('aliveCount');
+  const hpFill  = document.getElementById('hpFill');
+  const logBox  = document.getElementById('battleLog');
 
-function auraIntensity(){
-  if (xp >= 100000) return 1.2;
-  if (xp >= 10000)  return 0.9;
-  if (xp >= 1000)   return 0.6;
-  return 0.3;
-}
+  const autoAttackEl = document.getElementById('autoAttack');
+  const attackBtn    = document.getElementById('attackBtn');
+  const pauseBtn     = document.getElementById('pauseBtn');
+  const bossBtn      = document.getElementById('spawnBossBtn');
+  const diffSel      = document.getElementById('difficulty');
+  const atkSpeedEl   = document.getElementById('atkSpeed');
+  const scaleIn      = document.getElementById('scaleIn');
+  const sfxEl        = document.getElementById('sfxOn');
 
-// spawn aura particles around player
-function spawnAuraParticles(){
-  const amt = Math.floor(2 + 4*auraIntensity());
-  for(let i=0;i<amt;i++){
-    const ang=Math.random()*Math.PI*2;
-    const rad=25+Math.random()*30;
-    particles.push({
-      x:player.x+15+Math.cos(ang)*rad,
-      y:player.y-20+Math.sin(ang)*rad,
-      r:1+Math.random()*2,
-      life:60+Math.random()*40,
-      color:auraColor()
-    });
+  // Game state
+  let W = cvs.width, H = cvs.height;
+  let running = true;
+  let lastT = performance.now();
+  let kills = 0;
+
+  // Player
+  const player = {
+    x: 80, y: H-56, w: 28, h: 40,
+    vx: 0, speed: 1.4,
+    hp: 100, hpMax: 100,
+    atk: 1,  // updated from real XP
+    cd: 0,   // attack cooldown
+    cdBase: 42, // lower = faster (in frames). Scaled by atkSpeed control.
+    dashCd: 0
+  };
+
+  // Enemies
+  let zombies = [];
+  let spawnTimer = 0;
+  const spawnBase = 180; // frames baseline; modified by difficulty
+  const waveScale = () => ({
+    easy:   {hp: 1.0, spd: 1.0, freq: 1.2},
+    normal: {hp: 1.4, spd: 1.05, freq: 1.0},
+    hard:   {hp: 1.9, spd: 1.1,  freq: 0.8}
+  })[diffSel.value];
+
+  // Particles & damage text
+  let particles = [];
+  let floaters = [];
+
+  // Audio (tiny blips, offline)
+  let AC = null; let master = null;
+  function ensureAudio(){ if(AC) return; AC = new (window.AudioContext||window.webkitAudioContext)(); master = AC.createGain(); master.gain.value = 0.25; master.connect(AC.destination); }
+  function blip(freq=440, dur=0.07, vol=0.15){
+    if(!sfxEl.checked) return;
+    ensureAudio();
+    const t=AC.currentTime;
+    const o=AC.createOscillator(); const g=AC.createGain();
+    o.type='square'; o.frequency.value=freq;
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(vol,t+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g).connect(master); o.start(); o.stop(t+dur+0.01);
   }
-}
 
-// update & draw aura particles
-function updateParticles(dt){
-  for(let p of particles){
-    p.life-=dt*2;
-    p.y-=0.05*dt;
+  // Utils
+  function log(msg){
+    const line=document.createElement('div');
+    line.textContent = msg;
+    logBox.appendChild(line);
+    logBox.scrollTop = logBox.scrollHeight;
   }
-  particles=particles.filter(p=>p.life>0);
-  for(let p of particles){
-    const alpha=Math.min(1,p.life/60);
-    ctx.fillStyle=p.color;
-    ctx.globalAlpha=alpha*0.6;
-    ctx.fillRect(p.x,p.y,p.r,p.r);
-    ctx.globalAlpha=1;
-  }
-}
+  function drawRect(x,y,w,h,color){ ctx.fillStyle=color; ctx.fillRect(Math.floor(x),Math.floor(y),w,h); }
 
-// lightning flashes for very high XP
-let lightningTimer=0;
-function drawLightning(){
-  if (xp<100000) return;
-  lightningTimer-=1;
-  if (lightningTimer<=0){
-    lightningTimer=30+Math.random()*60;
-    ctx.strokeStyle='rgba(200,255,255,0.8)';
-    ctx.lineWidth=2;
-    ctx.beginPath();
-    const startX=player.x+15, startY=player.y-40;
-    ctx.moveTo(startX,startY);
-    let x=startX, y=startY;
-    for(let i=0;i<6;i++){
-      x+=Math.random()*10-5;
-      y+=10+Math.random()*10;
-      ctx.lineTo(x,y);
+  // Visuals: parallax sky + stars
+  const stars = Array.from({length:40}, ()=>({x:Math.random()*W, y:Math.random()*H*0.6, s:1+Math.random()*2, spd:.1+Math.random()*0.4}));
+  function drawBackground(dt){
+    // gradient sky
+    const grd = ctx.createLinearGradient(0,0,0,H);
+    grd.addColorStop(0,"#081026");
+    grd.addColorStop(1,"#04060f");
+    ctx.fillStyle = grd; ctx.fillRect(0,0,W,H);
+
+    // stars parallax
+    ctx.fillStyle = "#9bc9ff";
+    for (let st of stars){
+      st.x -= st.spd*dt;
+      if (st.x < 0) st.x += W;
+      ctx.fillRect(st.x, st.y, st.s, st.s);
     }
-    ctx.stroke();
-  }
-}
 
-// integrate into game loop
-const oldStep = step;
-step = function(ts){
-  const dt=(ts-lastT)/16.6; lastT=ts;
-  ctx.clearRect(0,0,width,height);
-  updatePower();
-
-  // Draw ground
-  ctx.fillStyle="#111"; ctx.fillRect(0,height-30,width,30);
-
-  player.cd=Math.max(0,player.cd-dt);
-  spawnTimer-=dt;
-  if(spawnTimer<=0){ spawnZombie(); spawnTimer=200+Math.random()*100; }
-
-  for(let z of zombies){ z.x-=z.spd*dt*10; }
-
-  const target=zombies.find(z=>z.x<150);
-  if(target && player.cd<=0){
-    target.hp-=player.atk;
-    player.cd=40;
-    ctx.fillStyle="#ff0";
-    ctx.fillRect(player.x+40,player.y-20,10,10);
-    log(`🗡️ Hit for ${player.atk} dmg`);
-    if(target.hp<=0){
-      kills++;
-      document.getElementById('killCount').textContent=kills;
-      zombies=zombies.filter(z=>z!==target);
-      log(`💀 Zombie defeated!`);
+    // ground tiles
+    for (let x=0; x<W; x+=16){
+      ctx.fillStyle = (Math.floor(x/16)%2===0) ? "#0b0b12" : "#0f0f18";
+      ctx.fillRect(x, H-24, 16, 24);
     }
   }
 
-  // draw aura & player
-  spawnAuraParticles();
-  updateParticles(dt);
-  drawLightning();
-  drawRect(player.x,player.y-40,30,40,"#4af");
+  // Aura (XP-based)
+  function auraColor(){
+    if (xp >= 100000) return '#9cfbff';
+    if (xp >= 10000)  return '#00ffff';
+    if (xp >= 1000)   return '#ffd700';
+    return '#ffdd77';
+  }
+  function auraIntensity(){
+    if (xp >= 100000) return 1.2;
+    if (xp >= 10000)  return 0.9;
+    if (xp >= 1000)   return 0.6;
+    return 0.3;
+  }
+  function spawnAuraParticles(){
+    const amt = Math.floor(1 + 3*auraIntensity());
+    for(let i=0;i<amt;i++){
+      const ang=Math.random()*Math.PI*2;
+      const rad=18+Math.random()*26;
+      particles.push({
+        x:player.x+player.w/2+Math.cos(ang)*rad,
+        y:player.y-player.h/2+Math.sin(ang)*rad,
+        r:1+Math.random()*2,
+        life:50+Math.random()*30,
+        color:auraColor()
+      });
+    }
+  }
+  let lightningTimer=0;
+  function drawLightning(){
+    if (xp<100000) return;
+    lightningTimer-=1;
+    if (lightningTimer<=0){
+      lightningTimer=24+Math.random()*50;
+      ctx.strokeStyle='rgba(200,255,255,0.85)';
+      ctx.lineWidth=2;
+      ctx.beginPath();
+      const startX=player.x+player.w/2, startY=player.y-player.h;
+      ctx.moveTo(startX,startY);
+      let x=startX, y=startY;
+      for(let i=0;i<6;i++){
+        x+=Math.random()*12-6;
+        y+=10+Math.random()*12;
+        ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    }
+  }
+  function updateParticles(dt){
+    for(let p of particles){ p.life-=dt*2; p.y-=0.04*dt; }
+    particles = particles.filter(p=>p.life>0);
+    for(let p of particles){
+      const a=Math.min(1, p.life/50)*0.6;
+      ctx.globalAlpha=a; ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,p.r,p.r); ctx.globalAlpha=1;
+    }
+  }
 
-  for(let z of zombies){ drawRect(z.x,z.y-40,30,40,"#0f0"); }
-  requestAnimationFrame(step);
-};
+  // Floating damage numbers
+  function addFloater(x,y,txt,color="#ffd700"){ floaters.push({x,y,txt,life:60,color}); }
+  function drawFloaters(dt){
+    for(let f of floaters){ f.life-=dt*2; f.y-=0.4*dt; }
+    floaters = floaters.filter(f=>f.life>0);
+    ctx.font="10px monospace"; ctx.textBaseline="top";
+    for(let f of floaters){
+      ctx.fillStyle=f.color; ctx.globalAlpha=Math.max(0,f.life/60);
+      ctx.fillText(f.txt, f.x, f.y);
+      ctx.globalAlpha=1;
+    }
+  }
+
+  // Power from real XP
+  function updatePower(){
+    const scale = Math.max(10, Math.min(10000, parseInt(scaleIn.value)||100));
+    const p = Math.max(1, Math.floor(xp / scale));
+    player.atk = p;
+    powerEl.textContent = p;
+  }
+
+  // Enemy factory
+  function spawnZombie(boss=false){
+    const s = waveScale();
+    const baseHP = boss ? 300 : (22 + Math.random()*26);
+    const z = {
+      x: W-40, y: H-56, w: 30, h: 40,
+      hpMax: Math.round(baseHP * (1 + kills*0.01) * s.hp * (boss?2.5:1)),
+      hp: 0,
+      spd: (boss?0.7: (0.6+Math.random()*0.3)) * s.spd,
+      boss
+    };
+    z.hp = z.hpMax;
+    zombies.push(z);
+  }
+
+  // Spawn pacing
+  function scheduleSpawn(dt){
+    const s = waveScale();
+    spawnTimer -= dt;
+    if (spawnTimer <= 0){
+      spawnZombie(false);
+      spawnTimer = spawnBase * s.freq;
+    }
+  }
+
+  // Combat
+  function damageZombie(z, dmg){
+    z.hp -= dmg;
+    addFloater(z.x+z.w/2-4, z.y-46, String(dmg), "#ffd36b");
+    impactFlash(z.x+z.w/2, z.y-20);
+    blip(640,0.05,0.12);
+    if (z.hp <= 0){
+      kills++; killsEl.textContent = kills;
+      zombies = zombies.filter(o=>o!==z);
+      log("💀 Zombie defeated!");
+      blip(320,0.08,0.18);
+    }
+  }
+
+  // Impact effect
+  function impactFlash(x,y){
+    particles.push({x:x-5, y:y-5, r:10, life:10, color:"#fff"});
+  }
+
+  // Attack handling
+  function canAttack(){ return player.cd <= 0; }
+  function doAttack(){
+    if (!canAttack()) return;
+    const speedMul = parseFloat(atkSpeedEl.value)||1.0;
+    player.cd = player.cdBase / speedMul;
+    // hit the foremost zombie in range
+    const target = zombies.find(z=> z.x < player.x + 90);
+    if (target){
+      const dmg = player.atk;
+      damageZombie(target, dmg);
+    }
+    // swing effect
+    ctx.fillStyle="#ff0"; ctx.fillRect(player.x+player.w, player.y-26, 12, 12);
+  }
+
+  // Player damage (if zombie gets too close)
+  function zombiesBite(dt){
+    for (let z of zombies){
+      z.x -= z.spd * dt;
+      if (z.x < player.x + 20){
+        // bite tick
+        if (Math.random() < 0.02*dt){
+          const bite = z.boss ? 10 : 4;
+          player.hp = Math.max(0, player.hp - bite);
+          addFloater(player.x, player.y-46, `-${bite}`, "#ff7777");
+          blip(180,0.05,0.2);
+        }
+      }
+    }
+  }
+
+  // Simple regen if alive
+  function regen(dt){
+    if (player.hp > 0){
+      player.hp = Math.min(player.hpMax, player.hp + 0.02*dt);
+    }
+  }
+
+  // Movement (keyboard)
+  const keys = {left:false,right:false,shift:false};
+  window.addEventListener('keydown', (e)=>{
+    if (e.key === 'ArrowLeft' || e.key.toLowerCase()==='a') keys.left = true;
+    if (e.key === 'ArrowRight'|| e.key.toLowerCase()==='d') keys.right= true;
+    if (e.key === 'Shift') keys.shift = true;
+    if (e.key === ' ') { e.preventDefault(); doAttack(); }
+  });
+  window.addEventListener('keyup', (e)=>{
+    if (e.key === 'ArrowLeft' || e.key.toLowerCase()==='a') keys.left = false;
+    if (e.key === 'ArrowRight'|| e.key.toLowerCase()==='d') keys.right= false;
+    if (e.key === 'Shift') keys.shift = false;
+  });
+
+  attackBtn.addEventListener('click', doAttack);
+  pauseBtn.addEventListener('click', ()=>{
+    running = !running;
+    pauseBtn.textContent = running ? "Pause" : "Resume";
+    if (running) { lastT = performance.now(); loop(lastT); }
+  });
+  bossBtn.addEventListener('click', ()=> spawnZombie(true));
+
+  // HP bar UI
+  function updateHPUI(){
+    const pct = Math.max(0, player.hp / player.hpMax) * 100;
+    hpFill.style.width = pct.toFixed(1) + '%';
+    hpFill.style.background = pct>50 ? 'linear-gradient(90deg,#35ff9b,#10c777)'
+      : pct>25 ? 'linear-gradient(90deg,#ffd36b,#ffba3a)'
+      : 'linear-gradient(90deg,#ff6b6b,#ff3a3a)';
+  }
+
+  // Drawing entities
+  function drawPlayer(){
+    drawRect(player.x, player.y-player.h, player.w, player.h, "#4af");
+    // visor/eyes
+    drawRect(player.x+9, player.y-player.h+12, 10, 4, "#001833");
+    // aura
+    spawnAuraParticles();
+    updateParticles(1);
+    drawLightning();
+  }
+  function drawZombie(z){
+    drawRect(z.x, z.y-z.h, z.w, z.h, z.boss ? "#49b250" : "#2fbf2f");
+    // eyes
+    drawRect(z.x+8, z.y-z.h+12, 4, 4, "#011");
+    drawRect(z.x+18, z.y-z.h+12, 4, 4, "#011");
+    // hp bar
+    const bw = 30, bh = 4;
+    const pct = Math.max(0, z.hp / z.hpMax);
+    ctx.fillStyle="#331"; ctx.fillRect(z.x, z.y-z.h-8, bw, bh);
+    ctx.fillStyle=pct>0.5?"#49ff8b":pct>0.25?"#ffd36b":"#ff6b6b";
+    ctx.fillRect(z.x, z.y-z.h-8, bw*pct, bh);
+  }
+
+  // Main loop
+  function loop(t){
+    const dt = Math.min(60, (t - lastT) / (1000/60)); // normalized frames
+    lastT = t;
+
+    // Update power from real XP
+    updatePower();
+
+    // World updates
+    if (running && player.hp > 0){
+      // Movement
+      const dashMul = keys.shift ? 2.2 : 1.0;
+      if (keys.left)  player.x -= player.speed * dashMul * dt;
+      if (keys.right) player.x += player.speed * dashMul * dt;
+      player.x = Math.max(10, Math.min(W-120, player.x));
+
+      // Attack cadence
+      player.cd = Math.max(0, player.cd - dt);
+      if (autoAttackEl.checked && canAttack()) doAttack();
+
+      // Spawning / enemy AI
+      scheduleSpawn(dt);
+      zombiesBite(dt);
+      regen(dt);
+    }
+
+    // Render
+    drawBackground(dt);
+    drawPlayer();
+    zombies.forEach(z=> drawZombie(z));
+    drawFloaters(dt);
+
+    aliveEl.textContent = zombies.length;
+    updateHPUI();
+
+    // death + revive
+    if (player.hp <= 0){
+      // death text
+      ctx.fillStyle="#ff5a5a"; ctx.font="16px monospace";
+      ctx.fillText("You fell... auto-reviving in 3s", W/2-110, H/2);
+      setTimeout(()=>{ if (player.hp<=0){ player.hp=player.hpMax; player.x=80; zombies.length=0; log("❤️ Revived!"); }}, 3000);
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  // Kick off
+  requestAnimationFrame(loop);
+
+})();
+</script>
 </body>
 </html>
 
