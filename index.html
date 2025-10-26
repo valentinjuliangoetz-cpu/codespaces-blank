@@ -1262,6 +1262,294 @@ function focusDrone(){
   return lp;
 }
 </script>
+<!-- === ADD-ON: Phase 4 — Skill Trees + Goal System === -->
+<style>
+  #skillsGoalsWrap{max-width:1080px;margin:16px auto;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:980px){#skillsGoalsWrap{grid-template-columns:1fr}}
+  .skillPanel,.goalPanel{background:#0f1122;border:1px solid #202a60;border-radius:12px;padding:14px;text-align:left}
+  .skillPanel h3,.goalPanel h3{color:var(--cyan);margin:0 0 10px}
+  .skillRow{display:flex;align-items:center;gap:10px;margin:8px 0}
+  .skillName{flex:1;font-weight:700}
+  .skillVal{min-width:40px;text-align:center}
+  .skillBtns button{background:#7afcff;color:#000;border:none;border-radius:10px;padding:6px 10px;font-weight:700;cursor:pointer}
+  .skillBtns button:disabled{opacity:.5;cursor:not-allowed}
+  #unspent{background:#0e1130;border:1px solid #202a60;border-radius:999px;padding:4px 10px;margin-left:6px}
+  #respecBtn{background:#ffd700;color:#000;border:none;border-radius:10px;padding:6px 10px;font-weight:700;cursor:pointer}
+  .mapNote{opacity:.85;font-size:.9rem;margin-top:8px}
+  .mapNote code{background:#0e1130;border:1px solid #202a60;border-radius:6px;padding:0 6px}
+  /* Goals */
+  .goalItem{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-bottom:1px dashed #202a60}
+  .goalItem:last-child{border-bottom:none}
+  .goalItem input[type="checkbox"]{margin-top:2px;width:18px;height:18px;accent-color:var(--cyan)}
+  .goalItem .xpBadge{font-size:.72rem;padding:2px 6px;border-radius:999px;border:1px solid #2a3580;background:#0c1030;color:#9bc9ff;margin-left:auto}
+  #goalForm{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  #goalForm input{background:#0e1130;color:#e0e0ff;border:1px solid #202a60;border-radius:8px;padding:6px 8px}
+  #goalForm button{background:#7afcff;color:#000;border:none;border-radius:10px;padding:6px 10px;font-weight:700;cursor:pointer}
+  .goalNote{opacity:.85;font-size:.9rem;margin-top:6px}
+</style>
+
+<div id="skillsGoalsWrap">
+  <!-- Skill Tree -->
+  <div class="skillPanel">
+    <h3>⚔️ Skill Tree</h3>
+    <div class="skillRow">
+      <div class="skillName">Physical</div>
+      <div class="skillVal" id="valPhysical">0</div>
+      <div class="skillBtns"><button id="addPhysical">+ Allocate</button></div>
+    </div>
+    <div class="skillRow">
+      <div class="skillName">Mental</div>
+      <div class="skillVal" id="valMental">0</div>
+      <div class="skillBtns"><button id="addMental">+ Allocate</button></div>
+    </div>
+    <div class="skillRow">
+      <div class="skillName">Social</div>
+      <div class="skillVal" id="valSocial">0</div>
+      <div class="skillBtns"><button id="addSocial">+ Allocate</button></div>
+    </div>
+    <div class="skillRow">
+      <div class="skillName">Spiritual</div>
+      <div class="skillVal" id="valSpiritual">0</div>
+      <div class="skillBtns"><button id="addSpiritual">+ Allocate</button></div>
+    </div>
+
+    <div style="margin-top:8px">
+      <span>Unspent Points:</span> <span id="unspent">0</span>
+      <button id="respecBtn" style="float:right">Respec</button>
+    </div>
+
+    <div class="mapNote">
+      Each point = <b>+10%</b> XP to mapped tasks.<br>
+      Mapping: 
+      <code>Physical</code> → Physical, Nutritional, Recovery<br>
+      <code>Mental</code> → Mental, Creative<br>
+      <code>Social</code> → Social, Sexual<br>
+      <code>Spiritual</code> → Spiritual
+    </div>
+  </div>
+
+  <!-- Goals -->
+  <div class="goalPanel">
+    <h3>🎯 Goals</h3>
+    <div id="activeGoals"></div>
+    <form id="goalForm">
+      <input type="text" id="goalText" placeholder="New goal (e.g., 100 push-ups)..." required>
+      <input type="number" id="goalXP" placeholder="XP" min="50" max="10000" value="200" required style="width:100px">
+      <button type="submit">Add Goal</button>
+    </form>
+    <div class="goalNote">Max 3 active goals. Checking a goal grants XP and archives it below.</div>
+    <h4 style="margin:10px 0 6px;color:#9bc9ff">Completed</h4>
+    <div id="doneGoals" style="max-height:160px;overflow:auto"></div>
+  </div>
+</div>
+
+<script>
+/* =========================
+   Phase 4: Skill Points + Goals
+========================= */
+
+/* ---- Skill state ---- */
+let skills = JSON.parse(localStorage.getItem('skills') || '{"Physical":0,"Mental":0,"Social":0,"Spiritual":0}');
+let unspent = parseInt(localStorage.getItem('skillUnspent') || "0", 10);
+
+// Attribute mapping for checklist categories
+const CATEGORY_ATTR = {
+  "Physical Energy (Strength, stamina, vitality)": "Physical",
+  "Nutritional Energy (Fuel, hormones, recovery)": "Physical",
+  "Recovery / Sleep Energy (Regeneration, balance)": "Physical",
+
+  "Mental Energy (Focus, clarity, discipline)": "Mental",
+  "Creative Energy (Flow, inspiration, expression)": "Mental",
+
+  "Social Energy (Connection, charisma, leadership)": "Social",
+  "Sexual Energy (Drive, magnetism, confidence)": "Social",
+
+  "Spiritual Energy (Meaning, peace, intuition)": "Spiritual"
+};
+
+// Return multiplier like 1.0, 1.1, 1.2 … (10% per point)
+function attrMultiplier(attr){
+  const pts = skills[attr] || 0;
+  return 1 + 0.10 * pts;
+}
+
+// Wrap addXP so we can grant skill points on each 10-level threshold
+const __oldAddXP = addXP;
+addXP = function(amount){
+  const before = getLevel(xp);
+  __oldAddXP(amount);
+  const after = getLevel(xp);
+  const beforeBucket = Math.floor((before-1)/10);
+  const afterBucket  = Math.floor((after-1)/10);
+  if (afterBucket > beforeBucket){
+    unspent += (afterBucket - beforeBucket);
+    localStorage.setItem('skillUnspent', String(unspent));
+    updateSkillsUI();
+  }
+};
+
+// Category-aware XP adder
+function addXPForCategory(category, baseXP){
+  const attr = CATEGORY_ATTR[category] || null;
+  const mult = attr ? attrMultiplier(attr) : 1.0;
+  const finalXP = Math.round(baseXP * mult);
+  addXP(finalXP);
+}
+
+// UI handlers for allocating points
+function bindSkillButtons(){
+  [["Physical","addPhysical"],["Mental","addMental"],["Social","addSocial"],["Spiritual","addSpiritual"]]
+  .forEach(([attr, btnId])=>{
+    document.getElementById(btnId).addEventListener('click', ()=>{
+      if (unspent <= 0) return;
+      skills[attr] = (skills[attr]||0) + 1;
+      unspent -= 1;
+      localStorage.setItem('skills', JSON.stringify(skills));
+      localStorage.setItem('skillUnspent', String(unspent));
+      updateSkillsUI();
+    });
+  });
+
+  document.getElementById('respecBtn').addEventListener('click', ()=>{
+    if (!confirm("Respec will reset attributes and refund all spent points. Proceed?")) return;
+    const spent = (skills.Physical||0)+(skills.Mental||0)+(skills.Social||0)+(skills.Spiritual||0);
+    skills = {"Physical":0,"Mental":0,"Social":0,"Spiritual":0};
+    unspent += spent;
+    localStorage.setItem('skills', JSON.stringify(skills));
+    localStorage.setItem('skillUnspent', String(unspent));
+    updateSkillsUI();
+  });
+}
+
+function updateSkillsUI(){
+  document.getElementById('valPhysical').textContent = skills.Physical||0;
+  document.getElementById('valMental').textContent   = skills.Mental||0;
+  document.getElementById('valSocial').textContent   = skills.Social||0;
+  document.getElementById('valSpiritual').textContent= skills.Spiritual||0;
+  document.getElementById('unspent').textContent     = unspent;
+  // disable buttons if no points
+  ["addPhysical","addMental","addSocial","addSpiritual"].forEach(id=>{
+    document.getElementById(id).disabled = (unspent<=0);
+  });
+}
+
+/* ---- Override checklist rendering to apply category bonus ---- */
+const __oldRenderChecklists = renderChecklists;
+renderChecklists = function(){
+  // re-render with category-aware XP
+  const container = document.getElementById('checklists');
+  container.innerHTML = "";
+  CHECKLIST.forEach((group, ci)=>{
+    const catName = group.cat;
+    const h4 = document.createElement('h4');
+    h4.textContent = catName;
+    container.appendChild(h4);
+
+    group.items.forEach((text, ii)=>{
+      const id = `${ci}:${ii}`;
+      const row = document.createElement('div');
+      row.className = "item";
+      const checked = !!(completed[savedCycleKey] && completed[savedCycleKey][id]);
+
+      // Show effective XP (base 10 * multiplier)
+      const attr = CATEGORY_ATTR[catName] || null;
+      const effXP = Math.round(TEN * (attr ? attrMultiplier(attr) : 1.0));
+      row.innerHTML = `
+        <input type="checkbox" id="chk-${id}" ${checked ? "checked disabled" : ""}>
+        <label for="chk-${id}">${text}${attr?` <span class="badge">${attr} +${(attrMultiplier(attr)-1)*100|0}%</span>`:""}</label>
+        <span class="badge">+${effXP} XP</span>
+      `;
+      if (checked) row.classList.add('done');
+
+      row.querySelector('input').addEventListener('change', (e)=>{
+        if (e.target.checked){
+          addXPForCategory(catName, TEN);
+          completed[savedCycleKey] = completed[savedCycleKey] || {};
+          completed[savedCycleKey][id] = true;
+          localStorage.setItem('completed', JSON.stringify(completed));
+          e.target.disabled = true;
+          row.classList.add('done');
+          // streak (re-use your function)
+          maybeIncrementStreak && maybeIncrementStreak();
+        }
+      });
+
+      container.appendChild(row);
+    });
+  });
+};
+
+/* ---- Goals system ---- */
+let goals = JSON.parse(localStorage.getItem('goals') || "[]");       // active [{id,text,xp}]
+let goalsDone = JSON.parse(localStorage.getItem('goalsDone') || "[]"); // archived [{text,xp,ts}]
+
+function uid(){ return Math.random().toString(36).slice(2,10); }
+
+function renderGoals(){
+  const activeBox = document.getElementById('activeGoals');
+  const doneBox   = document.getElementById('doneGoals');
+  activeBox.innerHTML = "";
+  doneBox.innerHTML   = "";
+
+  // Active
+  if (!goals.length){
+    activeBox.innerHTML = `<div class="goalNote">No active goals. Add one below (max 3).</div>`;
+  } else {
+    goals.forEach(g=>{
+      const row = document.createElement('div');
+      row.className = "goalItem";
+      row.innerHTML = `
+        <input type="checkbox" id="g-${g.id}">
+        <label for="g-${g.id}">${g.text}</label>
+        <span class="xpBadge">+${g.xp} XP</span>
+      `;
+      row.querySelector('input').addEventListener('change', (e)=>{
+        if (e.target.checked){
+          addXP(g.xp);
+          // archive
+          goalsDone.unshift({text:g.text, xp:g.xp, ts:Date.now()});
+          localStorage.setItem('goalsDone', JSON.stringify(goalsDone));
+          // remove from active
+          goals = goals.filter(x=>x.id!==g.id);
+          localStorage.setItem('goals', JSON.stringify(goals));
+          renderGoals();
+          maybeIncrementStreak && maybeIncrementStreak();
+        }
+      });
+      activeBox.appendChild(row);
+    });
+  }
+
+  // Done (show last 10)
+  goalsDone.slice(0,10).forEach(d=>{
+    const r = document.createElement('div');
+    r.className = "goalItem";
+    const date = new Date(d.ts).toLocaleDateString();
+    r.innerHTML = `<input type="checkbox" checked disabled><label>${d.text} <span style="opacity:.7">(${date})</span></label><span class="xpBadge">+${d.xp}</span>`;
+    doneBox.appendChild(r);
+  });
+}
+
+document.getElementById('goalForm').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const text = document.getElementById('goalText').value.trim();
+  const xpVal= Math.max(50, Math.min(10000, parseInt(document.getElementById('goalXP').value||"200",10)));
+  if (!text) return;
+  if (goals.length >= 3){ alert("Max 3 active goals. Complete one first."); return; }
+  goals.push({id:uid(), text, xp:xpVal});
+  localStorage.setItem('goals', JSON.stringify(goals));
+  e.target.reset();
+  renderGoals();
+});
+
+/* ---- Keep skills/goal UI fresh on load and when levels change ---- */
+bindSkillButtons();
+updateSkillsUI();
+renderGoals();
+
+/* ---- Re-render checklists now that we overrode it (so badges show) ---- */
+renderChecklists();
+</script>
 </body>
 </html>
 
