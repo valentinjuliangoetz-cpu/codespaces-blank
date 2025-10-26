@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aura Ascend — RPG Tracker</title>
+<style>
+  body{
+    background:radial-gradient(circle at center,#050510 0%,#000 100%);
+    font-family:"Poppins",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    color:#e0e0ff;text-align:center;margin:0;padding:20px;
+  }
+  h1{color:gold;text-shadow:0 0 15px gold;margin:0 0 6px}
+  #xpDisplay{margin:4px;font-size:1.05rem}
+  #levelDisplay{color:cyan;margin-bottom:12px}
+  #resetInfo{opacity:.8;font-size:.9rem;margin-bottom:14px}
+
+  /* Avatar + aura + ring */
+  #avatarContainer{position:relative;width:260px;height:320px;margin:0 auto 14px}
+  .ring-wrap{position:absolute;top:-16px;left:-16px;width:292px;height:292px;pointer-events:none}
+  .ring-track{fill:none;stroke:#1b2350;stroke-width:10;opacity:.7}
+  .ring-progress{fill:none;stroke:#7afcff;stroke-width:10;stroke-linecap:round;
+    transform:rotate(-90deg);transform-origin:50% 50%;
+    transition:stroke-dashoffset .5s ease,stroke .5s ease;
+    filter:drop-shadow(0 0 6px rgba(122,252,255,.35));
+  }
+  .aura{position:absolute;top:-34px;left:-34px;width:328px;height:388px;border-radius:50%;
+    background:radial-gradient(circle,rgba(255,215,0,.5),transparent 70%);
+    filter:blur(40px);z-index:-1;transition:all .6s ease;}
+  .avatar{position:absolute;bottom:0;left:50%;transform:translateX(-50%)}
+  .head{width:86px;height:86px;background:#fcd7b8;border-radius:50% 50% 40% 40%;
+    margin:0 auto;position:relative;z-index:3}
+  .hair{position:absolute;top:-16px;left:0;width:86px;height:44px;
+    background:linear-gradient(135deg,#ffe600 0%,#ffdd00 50%,#ffd700 100%);
+    clip-path:polygon(0 0,100% 0,85% 100%,15% 100%);border-radius:12px 12px 0 0;transform:skew(-10deg)}
+  .eyes{position:absolute;top:38px;left:18px;width:52px;display:flex;justify-content:space-between}
+  .eye{width:11px;height:11px;background:#00aaff;border-radius:50%}
+  .body{width:130px;height:138px;background:#111;border-radius:65px/95px;margin:0 auto;position:relative;top:-4px}
+  .arm{position:absolute;width:44px;height:84px;background:#fcd7b8;border-radius:22px;top:22px;transform-origin:top}
+  .left-arm{left:-38px;transform:rotate(10deg)}
+  .right-arm{right:-38px;transform:rotate(-10deg)}
+  .pants{width:130px;height:86px;background:#1e90ff;border-radius:12px 12px 0 0;
+    position:relative;margin:0 auto;top:-18px}
+  .pulse{animation:auraPulse 1.6s infinite alternate}
+  @keyframes auraPulse{from{filter:blur(28px) brightness(1)}to{filter:blur(42px) brightness(1.5)}}
+  .flex{animation:flexPose .8s ease-in-out}
+  @keyframes flexPose{0%{transform:translateX(-50%) scale(1)}
+    50%{transform:translateX(-50%) scale(1.1) rotate(-3deg)}
+    100%{transform:translateX(-50%) scale(1)}}
+
+  /* Panels */
+  .wrap{width:96%;max-width:1080px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr}}
+  .panel{background:#0d0d18;border:1px solid #1b2350;border-radius:12px;
+    padding:14px;text-align:left;box-shadow:0 0 12px rgba(255,255,255,.06)}
+  .panel h3{margin:0 0 8px;color:#7afcff}
+  .sectionTitle{margin:8px 0 6px;color:#ffd700;font-weight:700}
+
+  /* Task grids */
+  .task-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:600px){.task-grid{grid-template-columns:1fr}}
+  .task{
+    background:#0f1122;border:1px solid #202a60;padding:8px 10px;border-radius:8px;
+    display:flex;gap:8px;justify-content:space-between;align-items:center;
+  }
+  .task label{flex:1;font-size:.95rem}
+  .badge{
+    font-size:.72rem; padding:2px 6px; border-radius:999px; border:1px solid #2a3580;
+    background:#0c1030; color:#9bc9ff; margin-right:6px;
+  }
+  input[type="checkbox"]{width:18px;height:18px;accent-color:cyan}
+  .hint{opacity:.8;font-size:.9rem;margin:2px 0 8px}
+
+  /* Add task form */
+  #addTaskForm{margin-top:10px;display:flex;gap:6px;flex-wrap:wrap}
+  #addTaskForm input{padding:8px 10px;border-radius:8px;border:none;outline:none;background:#0e1130;color:#e0e0ff}
+  #addTaskForm button{background:cyan;color:#000;border:none;border-radius:8px;padding:8px 12px;font-weight:700;cursor:pointer}
+
+  /* Achievements */
+  .achievements-grid{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(44px,1fr));gap:8px;
+    background:#0f1122;border:1px solid #202a60;border-radius:10px;padding:10px;
+  }
+  .trophy{font-size:28px;display:grid;place-items:center;width:100%;aspect-ratio:1/1;
+    background:#0c1025;border-radius:10px;border:1px solid #1b2350}
+  .empty-note{opacity:.75;font-size:.95rem;padding:10px}
+</style>
+</head>
+<body>
+<h1>Aura Ascend</h1>
+<div id="xpDisplay">XP: 0</div>
+<div id="levelDisplay">Level: 1</div>
+<div id="resetInfo">Tasks & specials reset every <b>12 hours</b>. Next reset: <span id="nextReset">–</span></div>
+
+<div id="avatarContainer">
+  <!-- progress ring -->
+  <svg class="ring-wrap" viewBox="0 0 120 120">
+    <circle class="ring-track" cx="60" cy="60" r="52"></circle>
+    <circle id="ringProgress" class="ring-progress" cx="60" cy="60" r="52"
+      stroke-dasharray="326.73" stroke-dashoffset="326.73"></circle>
+  </svg>
+  <div class="aura pulse" id="aura"></div>
+  <div class="avatar" id="avatar">
+    <div class="head"><div class="hair"></div>
+      <div class="eyes"><div class="eye"></div><div class="eye"></div></div>
+    </div>
+    <div class="body"><div class="arm left-arm"></div><div class="arm right-arm"></div></div>
+    <div class="pants"></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <!-- Left: Core Daily Tasks -->
+  <div class="panel">
+    <h3>Daily Tasks</h3>
+    <div class="hint">Pre-loaded across sexual, physical, mental, social, spiritual, creative, nutrition & recovery — each <b>+10 XP</b>. Tick to gain XP; tasks vanish.</div>
+    <div id="coreTasks" class="task-grid"></div>
+
+    <h4 class="sectionTitle">Add Custom Task</h4>
+    <form id="addTaskForm">
+      <input type="text" id="newTaskName" placeholder="Add custom task…" required>
+      <input type="number" id="newTaskXP" placeholder="XP" min="1" max="1000" value="10" required>
+      <button type="submit">Add</button>
+    </form>
+  </div>
+
+  <!-- Right: Specials + Achievements -->
+  <div class="panel">
+    <h3>Special Daily Challenges</h3>
+    <div class="hint">High-difficulty, fear-overcoming missions. Rotates every 12h. Each <b>+50 XP</b>.</div>
+    <div id="specialTasks" class="task-grid"></div>
+
+    <h3 class="sectionTitle">Achievements</h3>
+    <div id="achievements" class="achievements-grid"></div>
+    <div id="noAch" class="empty-note" style="display:none;">Level up to earn random trophies 🏆</div>
+  </div>
+</div>
+
+<script>
+/* =========================
+   Config & Persistence
+========================= */
+const RESET_INTERVAL_MS = 12*60*60*1000; // 12h
+
+// ---------- CORE TASKS (pre-existing) ----------
+const defaultCore = [
+  // Sexual energy
+  {name:"No Fap today", cat:"Sexual", xp:10},
+  {name:"No porn consumed", cat:"Sexual", xp:10},
+  {name:"Pelvic floor exercises (2×20)", cat:"Sexual", xp:10},
+  {name:"Flirt / warm social vibe", cat:"Sexual", xp:10},
+
+  // Physical energy
+  {name:"Workout / Boxing session", cat:"Physical", xp:10},
+  {name:"Mobility or stretch 10 min", cat:"Physical", xp:10},
+  {name:"10k steps or long walk", cat:"Physical", xp:10},
+  {name:"Cold shower", cat:"Physical", xp:10},
+
+  // Mental energy
+  {name:"Meditation 20 min", cat:"Mental", xp:10},
+  {name:"Deep focus 25 min (no phone)", cat:"Mental", xp:10},
+  {name:"Read 10 pages", cat:"Mental", xp:10},
+  {name:"Plan tomorrow (5 min)", cat:"Mental", xp:10},
+
+  // Social energy
+  {name:"Talk to a stranger", cat:"Social", xp:10},
+  {name:"Call or text family/friend", cat:"Social", xp:10},
+  {name:"Give a genuine compliment", cat:"Social", xp:10},
+
+  // Spiritual energy
+  {name:"Gratitude journal (3 items)", cat:"Spiritual", xp:10},
+  {name:"Prayer / reflection 10 min", cat:"Spiritual", xp:10},
+  {name:"Acts of service (small)", cat:"Spiritual", xp:10},
+
+  // Creative energy
+  {name:"Creative practice 15 min", cat:"Creative", xp:10},
+  {name:"Publish or share 1 thing", cat:"Creative", xp:10},
+
+  // Nutrition / sunlight
+  {name:"High-protein meal", cat:"Nutrition", xp:10},
+  {name:"2 L water total", cat:"Nutrition", xp:10},
+  {name:"Morning sunlight 10 min", cat:"Nutrition", xp:10},
+  {name:"Whole-foods only today", cat:"Nutrition", xp:10},
+
+  // Recovery / sleep
+  {name:"No screens 60 min pre-bed", cat:"Recovery", xp:10},
+  {name:"Sleep 7+ hours", cat:"Recovery", xp:10},
+  {name:"Breathwork (3×1 min)", cat:"Recovery", xp:10}
+];
+
+// ---------- SPECIAL DAILY CHALLENGES (fear/edge) ----------
+const specialPool = [
+  {name:"Do 3 respectful cold approaches (greet + small talk)", xp:50},
+  {name:"Ask for a small discount in a shop (politely)", xp:50},
+  {name:"Post a short video sharing an opinion (no reshoots)", xp:50},
+  {name:"Spar an extra round or push a hard finisher", xp:50},
+  {name:"Take a 3-minute cold plunge / ice bath", xp:50},
+  {name:"Lead a group warm-up at the gym", xp:50},
+  {name:"Start a conversation with someone you admire", xp:50},
+  {name:"Share a personal story with a friend (vulnerable)", xp:50},
+  {name:"Do a 30-minute solo walk without phone or music", xp:50},
+  {name:"Negotiate something small (return, upgrade, seat)", xp:50},
+  {name:"Sing/speak confidently in a public space for 60s", xp:50},
+  {name:"Ask for constructive feedback on your work", xp:50}
+];
+
+// ---------- State ----------
+let xp = parseInt(localStorage.getItem('xp')) || 0;
+let coreTasks = JSON.parse(localStorage.getItem('coreTasks')) || [...defaultCore];
+let specialTasks = JSON.parse(localStorage.getItem('specialTasks') || "[]");
+let lastReset = parseInt(localStorage.getItem('lastReset') || "0");
+let lastSpecialKey = localStorage.getItem('lastSpecialKey') || null;
+let trophies = JSON.parse(localStorage.getItem('trophies') || "[]");
+
+// ---------- Level / Ring ----------
+const R = 52, CIRC = 2*Math.PI*R;
+const ring = document.getElementById('ringProgress'); ring.setAttribute('stroke-dasharray', CIRC);
+const trophyPool = ["🏆","💎","🔥","⚡️","🌟","🧠","💪","🛡️","🏹","🦁","🐉","🦅","🌙","☀️","🌈","🎯","🏔️","🚀","👑","🎖️","🥇","🥈","🥉","🪙","🧿"];
+function getLevel(x){ return Math.floor(x/100)+1; }
+
+function updateRing(){
+  const progress = (xp % 100) / 100;
+  ring.style.strokeDashoffset = CIRC*(1-progress);
+  ring.style.stroke = progress<.33 ? "#7afcff" : progress<.66 ? "#ffd700" : "#00a3ff";
+}
+
+function updateDisplay(){
+  document.getElementById('xpDisplay').textContent = `XP: ${xp}`;
+  document.getElementById('levelDisplay').textContent = `Level: ${getLevel(xp)}`;
+  const aura=document.getElementById('aura');
+  aura.style.background = xp<200 ? "radial-gradient(circle,rgba(120,120,120,.3),transparent 70%)"
+    : xp<1000 ? "radial-gradient(circle,rgba(255,215,0,.6),transparent 70%)"
+    : xp<5000 ? "radial-gradient(circle,rgba(0,255,255,.6),transparent 70%)"
+              : "radial-gradient(circle,rgba(0,150,255,.85),transparent 70%)";
+  updateRing();
+}
+
+function addXP(amount){
+  const prevLevel = getLevel(xp);
+  xp += amount;
+  localStorage.setItem('xp', xp);
+  updateDisplay();
+
+  // flex animation
+  const av=document.getElementById('avatar');
+  av.classList.add('flex'); setTimeout(()=>av.classList.remove('flex'), 800);
+
+  // level-up trophy
+  const newLevel = getLevel(xp);
+  if(newLevel > prevLevel){
+    const emoji = trophyPool[Math.floor(Math.random()*trophyPool.length)];
+    trophies.push({emoji, level:newLevel, ts:Date.now()});
+    localStorage.setItem('trophies', JSON.stringify(trophies));
+    renderAchievements();
+  }
+}
+
+// ---------- Renderers ----------
+function renderAchievements(){
+  const g=document.getElementById('achievements'), n=document.getElementById('noAch');
+  g.innerHTML=""; if(!trophies.length){ n.style.display="block"; return; } n.style.display="none";
+  trophies.forEach(t=>{
+    const d=document.createElement('div'); d.className="trophy"; d.title=`Level ${t.level}`;
+    d.textContent=t.emoji; g.appendChild(d);
+  });
+}
+
+function taskRowHTML(t, idx, isSpecial=false){
+  const badge = isSpecial ? `<span class="badge">Special</span>` : `<span class="badge">${t.cat||"Core"}</span>`;
+  return `<div class="task">
+    ${badge}
+    <label>${t.name}</label>
+    <input type="checkbox" data-idx="${idx}" data-xp="${t.xp}" ${isSpecial?'data-special="1"':''}>
+  </div>`;
+}
+
+function renderCore(){
+  const list=document.getElementById('coreTasks'); list.innerHTML="";
+  // show up to 12 at a time
+  coreTasks.slice(0,12).forEach((t,i)=> list.insertAdjacentHTML('beforeend', taskRowHTML(t,i,false)) );
+  list.querySelectorAll('input[type="checkbox"]').forEach(box=>{
+    box.addEventListener('change', e=>{
+      if(!e.target.checked) return;
+      const idx = +e.target.dataset.idx, gain = +e.target.dataset.xp;
+      addXP(gain);
+      coreTasks.splice(idx,1);
+      localStorage.setItem('coreTasks', JSON.stringify(coreTasks));
+      renderCore();
+    });
+  });
+}
+
+function renderSpecial(){
+  const list=document.getElementById('specialTasks'); list.innerHTML="";
+  specialTasks.forEach((t,i)=> list.insertAdjacentHTML('beforeend', taskRowHTML(t,i,true)) );
+  list.querySelectorAll('input[type="checkbox"]').forEach(box=>{
+    box.addEventListener('change', e=>{
+      if(!e.target.checked) return;
+      const idx = +e.target.dataset.idx, gain = +e.target.dataset.xp;
+      addXP(gain);
+      specialTasks.splice(idx,1);
+      localStorage.setItem('specialTasks', JSON.stringify(specialTasks));
+      renderSpecial();
+    });
+  });
+}
+
+// ---------- Specials selection (deterministic per 12h block) ----------
+function seededPick(arr, count, seed){
+  // simple LCG for stable picks per block
+  let a=1664525, c=1013904223, m=2**32, x=seed>>>0;
+  const idxs=new Set();
+  while(idxs.size < Math.min(count, arr.length)){
+    x=(a*x+c)%m;
+    idxs.add(x % arr.length);
+  }
+  return [...idxs].map(i=> ({...arr[i]}));
+}
+
+function buildSpecialsForKey(key){
+  // pick 2 specials per 12h block
+  return seededPick(specialPool, 2, key).map(t=> ({...t, xp:50}));
+}
+
+// ---------- Reset logic ----------
+function performReset(now){
+  coreTasks = [...defaultCore];
+  const blockKey = Math.floor(now / RESET_INTERVAL_MS);
+  specialTasks = buildSpecialsForKey(blockKey);
+  lastSpecialKey = String(blockKey);
+  lastReset = now;
+
+  localStorage.setItem('coreTasks', JSON.stringify(coreTasks));
+  localStorage.setItem('specialTasks', JSON.stringify(specialTasks));
+  localStorage.setItem('lastReset', String(lastReset));
+  localStorage.setItem('lastSpecialKey', lastSpecialKey);
+
+  renderCore(); renderSpecial();
+}
+
+function checkReset(){
+  const now = Date.now();
+  const currentKey = String(Math.floor(now / RESET_INTERVAL_MS));
+
+  if (!lastReset || now - lastReset >= RESET_INTERVAL_MS || lastSpecialKey !== currentKey){
+    performReset(now);
+  }
+  const next = new Date(Math.floor(now/RESET_INTERVAL_MS)*RESET_INTERVAL_MS + RESET_INTERVAL_MS);
+  document.getElementById('nextReset').textContent = next.toLocaleString();
+}
+
+setInterval(()=>{
+  const remain = (Math.floor(Date.now()/RESET_INTERVAL_MS)*RESET_INTERVAL_MS + RESET_INTERVAL_MS) - Date.now();
+  if (remain <= 0) checkReset();
+}, 60*1000);
+
+// ---------- Custom task add ----------
+document.getElementById('addTaskForm').addEventListener('submit', e=>{
+  e.preventDefault();
+  const name = document.getElementById('newTaskName').value.trim();
+  const xpVal = parseInt(document.getElementById('newTaskXP').value);
+  if(name && xpVal > 0){
+    coreTasks.push({name, cat:"Custom", xp:xpVal});
+    localStorage.setItem('coreTasks', JSON.stringify(coreTasks));
+    renderCore();
+    e.target.reset();
+    document.getElementById('newTaskXP').value = 10;
+  }
+});
+
+// ---------- Boot ----------
+checkReset();
+updateDisplay();
+renderCore();
+renderSpecial();
+renderAchievements();
+</script>
+</body>
+</html>
