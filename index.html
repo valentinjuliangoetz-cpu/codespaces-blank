@@ -2046,9 +2046,10 @@ renderChecklists();
 </div>
 
 <script>
+<script>
 /* =======================================================
-   Pixel Battle Arena v2 — integrated visuals + aura + controls
-   Uses your global `xp` variable from the tracker.
+   Pixel Battle Arena v2.1 — adds energy projectiles + trails
+   Uses your global `xp` variable. Keep previous HTML/CSS.
 ======================================================= */
 (() => {
   const cvs = document.getElementById('battleCanvas');
@@ -2083,7 +2084,7 @@ renderChecklists();
     hp: 100, hpMax: 100,
     atk: 1,  // updated from real XP
     cd: 0,   // attack cooldown
-    cdBase: 42, // lower = faster (in frames). Scaled by atkSpeed control.
+    cdBase: 42, // lower = faster (frames). Scaled by atkSpeed control.
     dashCd: 0
   };
 
@@ -2092,14 +2093,15 @@ renderChecklists();
   let spawnTimer = 0;
   const spawnBase = 180; // frames baseline; modified by difficulty
   const waveScale = () => ({
-    easy:   {hp: 1.0, spd: 1.0, freq: 1.2},
+    easy:   {hp: 1.0, spd: 1.0,  freq: 1.2},
     normal: {hp: 1.4, spd: 1.05, freq: 1.0},
     hard:   {hp: 1.9, spd: 1.1,  freq: 0.8}
   })[diffSel.value];
 
-  // Particles & damage text
+  // FX pools
   let particles = [];
   let floaters = [];
+  let projectiles = []; // NEW: energy shots
 
   // Audio (tiny blips, offline)
   let AC = null; let master = null;
@@ -2128,13 +2130,11 @@ renderChecklists();
   // Visuals: parallax sky + stars
   const stars = Array.from({length:40}, ()=>({x:Math.random()*W, y:Math.random()*H*0.6, s:1+Math.random()*2, spd:.1+Math.random()*0.4}));
   function drawBackground(dt){
-    // gradient sky
     const grd = ctx.createLinearGradient(0,0,0,H);
     grd.addColorStop(0,"#081026");
     grd.addColorStop(1,"#04060f");
     ctx.fillStyle = grd; ctx.fillRect(0,0,W,H);
 
-    // stars parallax
     ctx.fillStyle = "#9bc9ff";
     for (let st of stars){
       st.x -= st.spd*dt;
@@ -2142,7 +2142,6 @@ renderChecklists();
       ctx.fillRect(st.x, st.y, st.s, st.s);
     }
 
-    // ground tiles
     for (let x=0; x<W; x+=16){
       ctx.fillStyle = (Math.floor(x/16)%2===0) ? "#0b0b12" : "#0f0f18";
       ctx.fillRect(x, H-24, 16, 24);
@@ -2251,7 +2250,7 @@ renderChecklists();
     }
   }
 
-  // Combat
+  // Combat helpers
   function damageZombie(z, dmg){
     z.hp -= dmg;
     addFloater(z.x+z.w/2-4, z.y-46, String(dmg), "#ffd36b");
@@ -2264,26 +2263,66 @@ renderChecklists();
       blip(320,0.08,0.18);
     }
   }
-
-  // Impact effect
   function impactFlash(x,y){
-    particles.push({x:x-5, y:y-5, r:10, life:10, color:"#fff"});
+    for(let i=0;i<8;i++){
+      particles.push({x:x+(Math.random()*10-5), y:y+(Math.random()*10-5), r:1+Math.random()*2, life:20+Math.random()*10, color:"#fff"});
+    }
   }
 
-  // Attack handling
-  function canAttack(){ return player.cd <= 0; }
-  function doAttack(){
-    if (!canAttack()) return;
-    const speedMul = parseFloat(atkSpeedEl.value)||1.0;
-    player.cd = player.cdBase / speedMul;
-    // hit the foremost zombie in range
-    const target = zombies.find(z=> z.x < player.x + 90);
+  // NEW: Energy projectile
+  function fireProjectile(){
+    const speed = 3.5; // px/frame
+    // Target closest in front; else fire straight
+    let target = zombies.find(z => z.x > player.x);
+    let vx = speed, vy = 0;
+    const sx = player.x + player.w, sy = player.y - player.h/2;
     if (target){
-      const dmg = player.atk;
-      damageZombie(target, dmg);
+      const dx = (target.x + target.w/2) - sx;
+      const dy = (target.y - target.h/2) - sy;
+      const len = Math.hypot(dx,dy) || 1;
+      vx = speed * (dx/len);
+      vy = speed * (dy/len);
     }
-    // swing effect
-    ctx.fillStyle="#ff0"; ctx.fillRect(player.x+player.w, player.y-26, 12, 12);
+    const col = auraColor();
+    projectiles.push({
+      x:sx, y:sy, vx, vy,
+      r:3, life:240, color:col,
+      dmg: player.atk
+    });
+    // pew sound
+    blip(880,0.05,0.12);
+  }
+
+  function updateProjectiles(dt){
+    // move
+    for (let p of projectiles){
+      p.x += p.vx*dt;
+      p.y += p.vy*dt;
+      p.life -= dt;
+      // trail
+      particles.push({x:p.x, y:p.y, r:1.5, life:18, color:p.color});
+    }
+    // collide
+    for (let p of projectiles){
+      for (let z of zombies){
+        if (p.x > z.x && p.x < z.x+z.w && p.y < z.y && p.y > z.y - z.h){
+          damageZombie(z, p.dmg);
+          p.life = 0;
+          // burst
+          for(let i=0;i<10;i++){
+            particles.push({x:p.x, y:p.y, r:1+Math.random()*2, life:24+Math.random()*12, color:p.color});
+          }
+          break;
+        }
+      }
+    }
+    // cull
+    projectiles = projectiles.filter(p => p.life > 0 && p.x < W+20 && p.y > 0 && p.y < H);
+    // draw
+    for (let p of projectiles){
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x-2, p.y-2, 4, 4);
+    }
   }
 
   // Player damage (if zombie gets too close)
@@ -2291,7 +2330,6 @@ renderChecklists();
     for (let z of zombies){
       z.x -= z.spd * dt;
       if (z.x < player.x + 20){
-        // bite tick
         if (Math.random() < 0.02*dt){
           const bite = z.boss ? 10 : 4;
           player.hp = Math.max(0, player.hp - bite);
@@ -2323,7 +2361,7 @@ renderChecklists();
     if (e.key === 'Shift') keys.shift = false;
   });
 
-  attackBtn.addEventListener('click', doAttack);
+  attackBtn.addEventListener('click', ()=> doAttack());
   pauseBtn.addEventListener('click', ()=>{
     running = !running;
     pauseBtn.textContent = running ? "Pause" : "Resume";
@@ -2343,19 +2381,15 @@ renderChecklists();
   // Drawing entities
   function drawPlayer(){
     drawRect(player.x, player.y-player.h, player.w, player.h, "#4af");
-    // visor/eyes
-    drawRect(player.x+9, player.y-player.h+12, 10, 4, "#001833");
-    // aura
+    drawRect(player.x+9, player.y-player.h+12, 10, 4, "#001833"); // visor
     spawnAuraParticles();
     updateParticles(1);
     drawLightning();
   }
   function drawZombie(z){
     drawRect(z.x, z.y-z.h, z.w, z.h, z.boss ? "#49b250" : "#2fbf2f");
-    // eyes
     drawRect(z.x+8, z.y-z.h+12, 4, 4, "#011");
     drawRect(z.x+18, z.y-z.h+12, 4, 4, "#011");
-    // hp bar
     const bw = 30, bh = 4;
     const pct = Math.max(0, z.hp / z.hpMax);
     ctx.fillStyle="#331"; ctx.fillRect(z.x, z.y-z.h-8, bw, bh);
@@ -2363,44 +2397,46 @@ renderChecklists();
     ctx.fillRect(z.x, z.y-z.h-8, bw*pct, bh);
   }
 
+  // Attack handling (now fires projectiles)
+  function canAttack(){ return player.cd <= 0; }
+  function doAttack(){
+    if (!canAttack()) return;
+    const speedMul = parseFloat(atkSpeedEl.value)||1.0;
+    player.cd = player.cdBase / speedMul;
+    fireProjectile(); // NEW
+  }
+
   // Main loop
   function loop(t){
     const dt = Math.min(60, (t - lastT) / (1000/60)); // normalized frames
     lastT = t;
 
-    // Update power from real XP
     updatePower();
 
-    // World updates
     if (running && player.hp > 0){
-      // Movement
       const dashMul = keys.shift ? 2.2 : 1.0;
       if (keys.left)  player.x -= player.speed * dashMul * dt;
       if (keys.right) player.x += player.speed * dashMul * dt;
       player.x = Math.max(10, Math.min(W-120, player.x));
 
-      // Attack cadence
       player.cd = Math.max(0, player.cd - dt);
       if (autoAttackEl.checked && canAttack()) doAttack();
 
-      // Spawning / enemy AI
       scheduleSpawn(dt);
       zombiesBite(dt);
       regen(dt);
     }
 
-    // Render
     drawBackground(dt);
     drawPlayer();
     zombies.forEach(z=> drawZombie(z));
+    updateProjectiles(dt);       // NEW: move/draw shots
     drawFloaters(dt);
 
     aliveEl.textContent = zombies.length;
     updateHPUI();
 
-    // death + revive
     if (player.hp <= 0){
-      // death text
       ctx.fillStyle="#ff5a5a"; ctx.font="16px monospace";
       ctx.fillText("You fell... auto-reviving in 3s", W/2-110, H/2);
       setTimeout(()=>{ if (player.hp<=0){ player.hp=player.hpMax; player.x=80; zombies.length=0; log("❤️ Revived!"); }}, 3000);
@@ -2409,10 +2445,9 @@ renderChecklists();
     requestAnimationFrame(loop);
   }
 
-  // Kick off
   requestAnimationFrame(loop);
-
 })();
+</script>
 </script>
 </body>
 </html>
