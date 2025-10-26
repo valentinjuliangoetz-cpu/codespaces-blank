@@ -1659,6 +1659,122 @@ function step(ts){
 }
 requestAnimationFrame(step);
 </script>
+<!-- === ADD-ON: Aura Power-Up Effects === -->
+<script>
+/* =========================
+   Aura visual effects (XP-based)
+========================= */
+let particles = [];
+
+// pick aura color by XP
+function auraColor(){
+  if (xp >= 100000) return '#9cfbff';
+  if (xp >= 10000)  return '#00ffff';
+  if (xp >= 1000)   return '#ffd700';
+  return '#ffdd77';
+}
+
+function auraIntensity(){
+  if (xp >= 100000) return 1.2;
+  if (xp >= 10000)  return 0.9;
+  if (xp >= 1000)   return 0.6;
+  return 0.3;
+}
+
+// spawn aura particles around player
+function spawnAuraParticles(){
+  const amt = Math.floor(2 + 4*auraIntensity());
+  for(let i=0;i<amt;i++){
+    const ang=Math.random()*Math.PI*2;
+    const rad=25+Math.random()*30;
+    particles.push({
+      x:player.x+15+Math.cos(ang)*rad,
+      y:player.y-20+Math.sin(ang)*rad,
+      r:1+Math.random()*2,
+      life:60+Math.random()*40,
+      color:auraColor()
+    });
+  }
+}
+
+// update & draw aura particles
+function updateParticles(dt){
+  for(let p of particles){
+    p.life-=dt*2;
+    p.y-=0.05*dt;
+  }
+  particles=particles.filter(p=>p.life>0);
+  for(let p of particles){
+    const alpha=Math.min(1,p.life/60);
+    ctx.fillStyle=p.color;
+    ctx.globalAlpha=alpha*0.6;
+    ctx.fillRect(p.x,p.y,p.r,p.r);
+    ctx.globalAlpha=1;
+  }
+}
+
+// lightning flashes for very high XP
+let lightningTimer=0;
+function drawLightning(){
+  if (xp<100000) return;
+  lightningTimer-=1;
+  if (lightningTimer<=0){
+    lightningTimer=30+Math.random()*60;
+    ctx.strokeStyle='rgba(200,255,255,0.8)';
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    const startX=player.x+15, startY=player.y-40;
+    ctx.moveTo(startX,startY);
+    let x=startX, y=startY;
+    for(let i=0;i<6;i++){
+      x+=Math.random()*10-5;
+      y+=10+Math.random()*10;
+      ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+}
+
+// integrate into game loop
+const oldStep = step;
+step = function(ts){
+  const dt=(ts-lastT)/16.6; lastT=ts;
+  ctx.clearRect(0,0,width,height);
+  updatePower();
+
+  // Draw ground
+  ctx.fillStyle="#111"; ctx.fillRect(0,height-30,width,30);
+
+  player.cd=Math.max(0,player.cd-dt);
+  spawnTimer-=dt;
+  if(spawnTimer<=0){ spawnZombie(); spawnTimer=200+Math.random()*100; }
+
+  for(let z of zombies){ z.x-=z.spd*dt*10; }
+
+  const target=zombies.find(z=>z.x<150);
+  if(target && player.cd<=0){
+    target.hp-=player.atk;
+    player.cd=40;
+    ctx.fillStyle="#ff0";
+    ctx.fillRect(player.x+40,player.y-20,10,10);
+    log(`🗡️ Hit for ${player.atk} dmg`);
+    if(target.hp<=0){
+      kills++;
+      document.getElementById('killCount').textContent=kills;
+      zombies=zombies.filter(z=>z!==target);
+      log(`💀 Zombie defeated!`);
+    }
+  }
+
+  // draw aura & player
+  spawnAuraParticles();
+  updateParticles(dt);
+  drawLightning();
+  drawRect(player.x,player.y-40,30,40,"#4af");
+
+  for(let z of zombies){ drawRect(z.x,z.y-40,30,40,"#0f0"); }
+  requestAnimationFrame(step);
+};
 </body>
 </html>
 
