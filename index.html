@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aura Ascend — RPG Tracker</title>
+<style>
+  body {
+    background: radial-gradient(circle at center, #050510 0%, #000 100%);
+    font-family: "Poppins", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    color: #e0e0ff;
+    text-align: center;
+    margin: 0;
+    padding: 20px;
+  }
+  h1 { color: gold; text-shadow: 0 0 15px gold; margin: 0 0 6px; }
+  #xpDisplay { margin: 4px; font-size: 1.05rem; }
+  #levelDisplay { color: cyan; margin-bottom: 12px; }
+  #resetInfo { opacity: .8; font-size: .9rem; margin-bottom: 14px; }
+
+  /* Avatar container */
+  #avatarContainer {
+    position: relative;
+    width: 260px; height: 320px;
+    margin: 0 auto 14px;
+  }
+
+  /* Progress ring */
+  .ring-wrap {
+    position:absolute;
+    top:-16px; left:-16px;
+    width:292px; height:292px;
+    pointer-events:none;
+  }
+  .ring-track {
+    fill: none;
+    stroke: #1b2350;
+    stroke-width: 10;
+    opacity: .7;
+  }
+  .ring-progress {
+    fill: none;
+    stroke: #7afcff;             /* progress color */
+    stroke-width: 10;
+    stroke-linecap: round;
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+    transition: stroke-dashoffset .5s ease, stroke .5s ease;
+    filter: drop-shadow(0 0 6px rgba(122,252,255,.35));
+  }
+
+  .aura {
+    position: absolute; top: -34px; left: -34px;
+    width: 328px; height: 388px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,215,0,0.5), transparent 70%);
+    filter: blur(40px); z-index: -1; transition: all .6s ease;
+  }
+  .avatar { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); }
+  .head { width: 86px; height: 86px; background: #fcd7b8; border-radius: 50% 50% 40% 40%; margin: 0 auto; position: relative; z-index: 3; }
+  .hair { position: absolute; top: -16px; left: 0; width: 86px; height: 44px; background: linear-gradient(135deg,#ffe600 0%,#ffdd00 50%,#ffd700 100%); clip-path: polygon(0 0,100% 0,85% 100%,15% 100%); border-radius: 12px 12px 0 0; transform: skew(-10deg); }
+  .eyes { position: absolute; top: 38px; left: 18px; width: 52px; display: flex; justify-content: space-between; }
+  .eye { width: 11px; height: 11px; background: #00aaff; border-radius: 50%; }
+  .body { width: 130px; height: 138px; background: #111; border-radius: 65px / 95px; margin: 0 auto; position: relative; top: -4px; }
+  .arm { position: absolute; width: 44px; height: 84px; background: #fcd7b8; border-radius: 22px; top: 22px; transform-origin: top; }
+  .left-arm { left: -38px; transform: rotate(10deg); }
+  .right-arm { right: -38px; transform: rotate(-10deg); }
+  .pants { width: 130px; height: 86px; background: #1e90ff; border-radius: 12px 12px 0 0; position: relative; margin: 0 auto; top: -18px; }
+
+  /* Animations */
+  .pulse { animation: auraPulse 1.6s infinite alternate; }
+  @keyframes auraPulse { from { filter: blur(28px) brightness(1); } to { filter: blur(42px) brightness(1.5); } }
+  .flex { animation: flexPose .8s ease-in-out; }
+  @keyframes flexPose { 0%{transform:translateX(-50%) scale(1)} 50%{transform:translateX(-50%) scale(1.1) rotate(-3deg)} 100%{transform:translateX(-50%) scale(1)} }
+
+  /* Layout panels */
+  .wrap { width: 96%; max-width: 980px; margin: 0 auto; display: grid; grid-template-columns: 1fr; gap: 16px; }
+  @media (min-width: 860px){ .wrap { grid-template-columns: 1fr 1fr; } }
+
+  .panel {
+    background: #0d0d18;
+    border: 1px solid #1b2350;
+    border-radius: 12px;
+    padding: 14px;
+    text-align: left;
+    box-shadow: 0 0 12px rgba(255,255,255,.06);
+  }
+  .panel h3 { margin: 0 0 8px; color: #7afcff; }
+
+  /* Task list */
+  .task { background: #0f1122; border: 1px solid #202a60; padding: 10px 12px; margin: 8px 0; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
+  .task label { flex: 1; }
+  input[type="checkbox"] { width: 18px; height: 18px; accent-color: cyan; }
+  .hint { opacity: .8; font-size: .9rem; margin: 2px 0 8px; }
+
+  /* Add task form */
+  #addTaskForm { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+  #addTaskForm input { padding: 8px 10px; border-radius: 8px; border: none; outline: none; background: #0e1130; color: #e0e0ff; }
+  #addTaskForm button { background: cyan; color: #000; border: none; border-radius: 8px; padding: 8px 12px; font-weight: 700; cursor: pointer; }
+
+  /* Achievements */
+  .achievements-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 8px;
+    background: #0f1122; border: 1px solid #202a60; border-radius: 10px; padding: 10px;
+  }
+  .trophy {
+    font-size: 28px; display: grid; place-items: center;
+    width: 100%; aspect-ratio: 1/1; background: #0c1025; border-radius: 10px; border: 1px solid #1b2350;
+  }
+  .empty-note { opacity: .75; font-size: .95rem; padding: 10px; }
+</style>
+</head>
+<body>
+  <h1>Aura Ascend</h1>
+  <div id="xpDisplay">XP: 0</div>
+  <div id="levelDisplay">Level: 1</div>
+  <div id="resetInfo">Tasks reset every <b>12 hours</b>. Next reset: <span id="nextReset">–</span></div>
+
+  <div id="avatarContainer">
+    <!-- Tiny progress ring -->
+    <svg class="ring-wrap" viewBox="0 0 120 120">
+      <!-- track -->
+      <circle class="ring-track" cx="60" cy="60" r="52"></circle>
+      <!-- progress (dashoffset updated in JS) -->
+      <circle id="ringProgress" class="ring-progress" cx="60" cy="60" r="52" stroke-dasharray="326.7256359733385" stroke-dashoffset="326.7256359733385"></circle>
+    </svg>
+
+    <div class="aura pulse" id="aura"></div>
+    <div class="avatar" id="avatar">
+      <div class="head">
+        <div class="hair"></div>
+        <div class="eyes"><div class="eye"></div><div class="eye"></div></div>
+      </div>
+      <div class="body"><div class="arm left-arm"></div><div class="arm right-arm"></div></div>
+      <div class="pants"></div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="panel">
+      <h3>Daily Tasks</h3>
+      <div class="hint">Focus: sexual, physical, mental, social, spiritual, creative, nutrition, sleep/recovery. Each gives <b>10 XP</b>. Completing one removes it and shows the next.</div>
+      <div id="taskList"></div>
+
+      <form id="addTaskForm">
+        <input type="text" id="newTaskName" placeholder="Add custom task…" required>
+        <input type="number" id="newTaskXP" placeholder="XP" min="1" max="1000" value="10" required>
+        <button type="submit">Add Task</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h3>Achievements</h3>
+      <div id="achievements" class="achievements-grid"></div>
+      <div id="noAch" class="empty-note" style="display:none;">Level up to earn random trophies 🏆</div>
+    </div>
+  </div>
+
+<script>
+/* =========================
+   Data & Persistence
+========================= */
+const RESET_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
+const defaultTasks = [
+  {name:"No Fap today", xp:10},
+  {name:"No porn consumed", xp:10},
+  {name:"Breathwork (3×1 min)", xp:10},
+  {name:"Flirt / warm social vibe", xp:10},
+  {name:"Workout / Boxing session", xp:10},
+  {name:"10 min mobility/stretch", xp:10},
+  {name:"10k steps or long walk", xp:10},
+  {name:"Cold shower", xp:10},
+  {name:"20 min meditation", xp:10},
+  {name:"Deep focus 25 min (no phone)", xp:10},
+  {name:"Read 10 pages", xp:10},
+  {name:"Talk to a stranger", xp:10},
+  {name:"Call or text a friend/family", xp:10},
+  {name:"Gratitude journal (3 items)", xp:10},
+  {name:"Prayer / reflection 10 min", xp:10},
+  {name:"15 min creative practice", xp:10},
+  {name:"High-protein meal", xp:10},
+  {name:"2L water total", xp:10},
+  {name:"Morning sunlight 10 min", xp:10},
+  {name:"No screens 60 min pre-bed", xp:10},
+  {name:"Sleep 7+ hours", xp:10}
+];
+
+let xp = parseInt(localStorage.getItem('xp')) || 0;
+let tasks = JSON.parse(localStorage.getItem('tasks')) || [...defaultTasks];
+let lastReset = parseInt(localStorage.getItem('lastReset') || "0");
+let trophies = JSON.parse(localStorage.getItem('trophies') || "[]");
+
+/* =========================
+   UI & Helpers
+========================= */
+const trophyPool = ["🏆","💎","🔥","⚡️","🌟","🧠","💪","🛡️","🏹","🦁","🐉","🦅","🌙","☀️","🌈","🎯","🏔️","🚀","👑","🎖️","🥇","🥈","🥉","🪙","🧿"];
+function getLevel(x){ return Math.floor(x/100) + 1; }
+
+/* Progress ring math */
+const R = 52; // matches r in SVG
+const CIRC = 2 * Math.PI * R; // ≈ 326.7256
+const ringEl = document.getElementById('ringProgress');
+ringEl.setAttribute('stroke-dasharray', String(CIRC));
+
+function updateRing(){
+  const progress = (xp % 100) / 100;            // 0..1 toward next level
+  const offset = CIRC * (1 - progress);
+  ringEl.style.strokeDashoffset = String(offset);
+  // color shift at milestones
+  if (progress < 0.33) ringEl.style.stroke = '#7afcff';
+  else if (progress < 0.66) ringEl.style.stroke = '#ffd700';
+  else ringEl.style.stroke = '#00a3ff';
+}
+
+function updateDisplay(){
+  const level = getLevel(xp);
+  document.getElementById('xpDisplay').innerText = `XP: ${xp}`;
+  document.getElementById('levelDisplay').innerText = `Level: ${level}`;
+
+  // Aura intensity by XP
+  const aura = document.getElementById('aura');
+  if (xp < 200) {
+    aura.style.background = "radial-gradient(circle, rgba(120,120,120,0.3), transparent 70%)";
+  } else if (xp < 1000) {
+    aura.style.background = "radial-gradient(circle, rgba(255,215,0,0.6), transparent 70%)";
+  } else if (xp < 5000) {
+    aura.style.background = "radial-gradient(circle, rgba(0,255,255,0.6), transparent 70%)";
+  } else {
+    aura.style.background = "radial-gradient(circle, rgba(0,150,255,0.85), transparent 70%)";
+  }
+  updateRing();
+}
+
+function addXP(amount){
+  const prevLevel = getLevel(xp);
+  xp += amount;
+  localStorage.setItem('xp', xp);
+  updateDisplay();
+
+  // Flex animation
+  const avatar = document.getElementById('avatar');
+  avatar.classList.add("flex");
+  setTimeout(()=>avatar.classList.remove("flex"), 800);
+
+  // Level-up check -> award trophy
+  const newLevel = getLevel(xp);
+  if (newLevel > prevLevel) {
+    awardTrophy(newLevel);
+  }
+}
+
+function awardTrophy(level){
+  const emoji = trophyPool[Math.floor(Math.random()*trophyPool.length)];
+  const item = { emoji, level, ts: Date.now() };
+  trophies.push(item);
+  localStorage.setItem('trophies', JSON.stringify(trophies));
+  renderAchievements();
+}
+
+function renderAchievements(){
+  const grid = document.getElementById('achievements');
+  const empty = document.getElementById('noAch');
+  grid.innerHTML = "";
+  if (!trophies.length) {
+    empty.style.display = "block";
+    return;
+  }
+  empty.style.display = "none";
+  trophies.forEach(t=>{
+    const d = document.createElement('div');
+    d.className = "trophy";
+    d.title = `Level ${t.level}`;
+    d.textContent = t.emoji;
+    grid.appendChild(d);
+  });
+}
+
+/* Task list & reset */
+function renderTasks(){
+  const list = document.getElementById('taskList');
+  list.innerHTML = '';
+  // show up to 6 at a time
+  tasks.slice(0,6).forEach((t,i)=>{
+    const div = document.createElement('div');
+    div.className = 'task';
+    div.innerHTML = `<label>${t.name}</label><span>+${t.xp} XP</span><input type="checkbox" data-idx="${i}" data-xp="${t.xp}">`;
+    list.appendChild(div);
+  });
+  document.querySelectorAll('#taskList input[type="checkbox"]').forEach(box=>{
+    box.addEventListener('change', e=>{
+      if (e.target.checked){
+        const gain = parseInt(e.target.dataset.xp);
+        const idx  = parseInt(e.target.dataset.idx);
+        addXP(gain);
+        tasks.splice(idx,1); // remove completed, reveal next in pool
+        localStorage.setItem('tasks', JSON.stringify(tasks));
+        renderTasks();
+      }
+    });
+  });
+}
+
+function performReset(now){
+  tasks = [...defaultTasks]; // fresh daily set
+  localStorage.setItem('tasks', JSON.stringify(tasks));
+  lastReset = now;
+  localStorage.setItem('lastReset', String(now));
+  renderTasks();
+}
+
+function checkAndScheduleReset(){
+  const now = Date.now();
+  if (!lastReset) {
+    performReset(now);
+  } else if (now - lastReset >= RESET_INTERVAL_MS){
+    performReset(now);
+  }
+  // show next reset timestamp
+  const next = new Date(lastReset + RESET_INTERVAL_MS);
+  document.getElementById('nextReset').textContent = next.toLocaleString();
+}
+setInterval(()=>{
+  if (!lastReset) return;
+  const remain = (lastReset + RESET_INTERVAL_MS) - Date.now();
+  if (remain <= 0) { checkAndScheduleReset(); }
+}, 60*1000);
+
+/* Add custom task */
+document.getElementById('addTaskForm').addEventListener('submit', e=>{
+  e.preventDefault();
+  const name = document.getElementById('newTaskName').value.trim();
+  const xpVal = parseInt(document.getElementById('newTaskXP').value);
+  if (name && xpVal > 0){
+    tasks.push({name, xp: xpVal});
+    localStorage.setItem('tasks', JSON.stringify(tasks));
+    renderTasks();
+    e.target.reset();
+    document.getElementById('newTaskXP').value = 10;
+  }
+});
+
+/* Boot */
+checkAndScheduleReset();
+updateDisplay();
+renderTasks();
+renderAchievements();
+</script>
+</body>
+</html>
