@@ -622,6 +622,142 @@ function renderCharts(){
   });
 }
 </script>
+<!-- === ADD-ON: Phase 2 — Mood Tracker + Reflection Journal === -->
+<style>
+  #moodPanel{
+    margin-top:18px;
+    background:#0f1122;
+    border:1px solid #202a60;
+    border-radius:12px;
+    padding:14px;
+    text-align:left;
+  }
+  #moodPanel h3{color:var(--cyan);margin-top:0}
+  .moodRow{display:flex;align-items:center;gap:8px;margin:6px 0}
+  .moodRow label{flex:1}
+  .moodRow input[type=range]{flex:2}
+  #reflectPanel{margin-top:14px}
+  #reflectPanel textarea{
+    width:100%;height:56px;background:#0e1130;color:#e0e0ff;
+    border:1px solid #202a60;border-radius:8px;padding:6px;font-family:inherit;
+  }
+  #reflectPanel button{
+    margin-top:8px;background:var(--cyan);color:#000;border:none;
+    border-radius:8px;padding:6px 10px;font-weight:700;cursor:pointer;
+  }
+  /* Stats extra tab */
+  #moodChart{margin-top:20px}
+  #reflectLog{margin-top:20px;font-size:.9rem;max-height:160px;overflow-y:auto}
+  #reflectLog b{color:var(--gold)}
+  #reflectLog p{margin:4px 0 8px}
+</style>
+
+<div id="moodPanel">
+  <h3>🧘 Daily Mood & Energy</h3>
+  <div class="moodRow"><label>Physical</label><input type="range" min="1" max="10" id="moodPhysical"></div>
+  <div class="moodRow"><label>Mental</label><input type="range" min="1" max="10" id="moodMental"></div>
+  <div class="moodRow"><label>Emotional</label><input type="range" min="1" max="10" id="moodEmotional"></div>
+  <div class="moodRow"><label>Social</label><input type="range" min="1" max="10" id="moodSocial"></div>
+  <div class="moodRow"><label>Spiritual</label><input type="range" min="1" max="10" id="moodSpiritual"></div>
+
+  <div id="reflectPanel">
+    <h3>📓 Reflection</h3>
+    <textarea id="reflectText" placeholder="What did you learn or feel today?"></textarea>
+    <button id="saveReflection">Save Reflection</button>
+  </div>
+</div>
+
+<script>
+/* =========================
+   Mood + Reflection System
+========================= */
+
+let moods = JSON.parse(localStorage.getItem('moods')||"{}");  // {cycleKey:{...}}
+let reflections = JSON.parse(localStorage.getItem('reflections')||"{}"); // {cycleKey:text}
+
+// Save whenever sliders move
+['Physical','Mental','Emotional','Social','Spiritual'].forEach(name=>{
+  const el=document.getElementById('mood'+name);
+  el.addEventListener('input',()=>{
+    moods[savedCycleKey]=moods[savedCycleKey]||{};
+    moods[savedCycleKey][name]=parseInt(el.value);
+    localStorage.setItem('moods',JSON.stringify(moods));
+  });
+});
+
+// Save reflection
+document.getElementById('saveReflection').addEventListener('click',()=>{
+  const val=document.getElementById('reflectText').value.trim();
+  if(!val)return;
+  reflections[savedCycleKey]=val;
+  localStorage.setItem('reflections',JSON.stringify(reflections));
+  alert("Reflection saved ✅");
+});
+
+// Reset on new cycle
+const oldEnsureCycle2 = ensureCycle;
+ensureCycle = function(){
+  const oldKey = savedCycleKey;
+  oldEnsureCycle2();
+  if(oldKey && oldKey!==savedCycleKey){
+    // new day → clear UI
+    ['Physical','Mental','Emotional','Social','Spiritual'].forEach(n=>{
+      document.getElementById('mood'+n).value=5;
+    });
+    document.getElementById('reflectText').value="";
+  }
+};
+
+// Prefill if exists
+function loadTodayMood(){
+  const m=moods[savedCycleKey]||{};
+  ['Physical','Mental','Emotional','Social','Spiritual'].forEach(n=>{
+    document.getElementById('mood'+n).value=m[n]||5;
+  });
+  document.getElementById('reflectText').value=reflections[savedCycleKey]||"";
+}
+loadTodayMood();
+
+/* === Extend Stats Modal with Mood Chart + Reflection Log === */
+function renderCharts(){
+  const ctx1=document.getElementById('xpChart');
+  const ctx2=document.getElementById('streakChart');
+  const dates=history.map(h=>h.date);
+  const xps=history.map(h=>h.gained);
+  const strs=history.map(h=>h.streak);
+
+  if(window.xpChartObj){window.xpChartObj.destroy();window.streakChartObj.destroy();if(window.moodChartObj)window.moodChartObj.destroy();}
+
+  window.xpChartObj=new Chart(ctx1,{type:'line',data:{labels:dates,datasets:[{label:'XP Gained',data:xps,borderColor:'#ffd700',tension:.3}]},options:{scales:{x:{ticks:{color:'#9bc9ff'}},y:{ticks:{color:'#9bc9ff'}}}}});
+  window.streakChartObj=new Chart(ctx2,{type:'line',data:{labels:dates,datasets:[{label:'Streak',data:strs,borderColor:'#66ffb2',tension:.3}]},options:{scales:{x:{ticks:{color:'#9bc9ff'}},y:{ticks:{color:'#9bc9ff'}}}}});
+
+  // Add mood chart if container missing
+  if(!document.getElementById('moodChart')){
+    const can=document.createElement('canvas'); can.id='moodChart'; document.getElementById('statsDialog').appendChild(can);
+    const refl=document.createElement('div'); refl.id='reflectLog'; document.getElementById('statsDialog').appendChild(refl);
+  }
+  const allKeys=Object.keys(moods).sort();
+  const moodDates=[],avgVals=[];
+  allKeys.forEach(k=>{
+    const obj=moods[k]; if(!obj)return;
+    const vals=Object.values(obj); if(!vals.length)return;
+    const avg=vals.reduce((a,b)=>a+b,0)/vals.length;
+    moodDates.push(k.split("-")[0]);
+    avgVals.push(avg.toFixed(1));
+  });
+  const ctx3=document.getElementById('moodChart');
+  window.moodChartObj=new Chart(ctx3,{type:'line',data:{labels:moodDates,datasets:[{label:'Avg Mood (1-10)',data:avgVals,borderColor:'#9bc9ff',tension:.3}]},options:{scales:{x:{ticks:{color:'#9bc9ff'}},y:{min:0,max:10,ticks:{color:'#9bc9ff'}}}}});
+
+  // reflection log
+  const refl=document.getElementById('reflectLog');
+  const sortedKeys=Object.keys(reflections).sort().slice(-10);
+  refl.innerHTML="<h4 style='color:#7afcff;margin:8px 0'>Recent Reflections</h4>";
+  sortedKeys.reverse().forEach(k=>{
+    const text=reflections[k];
+    refl.innerHTML+=`<p><b>${k.split("-")[0]}</b>: ${text}</p>`;
+  });
+}
+</script>
 </body>
 </html>
 
