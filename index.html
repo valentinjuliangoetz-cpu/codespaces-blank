@@ -78,6 +78,87 @@
 </style>
 </head>
 <body>
+	<!-- === APP NAVIGATION LAYOUT SYSTEM === -->
+<style>
+  body {
+    margin:0;
+    background:#0b0b14;
+    color:#e0e0ff;
+    font-family:system-ui, sans-serif;
+  }
+
+  /* Navigation bar */
+  #navBar {
+    display:flex;
+    justify-content:space-around;
+    align-items:center;
+    background:#0f1122;
+    border-bottom:1px solid #202a60;
+    padding:8px 0;
+    position:sticky;
+    top:0;
+    z-index:1000;
+  }
+  #navBar button {
+    background:none;
+    border:none;
+    color:#9bc9ff;
+    font-size:1rem;
+    padding:6px 12px;
+    cursor:pointer;
+    font-weight:600;
+  }
+  #navBar button.active {
+    color:#7afcff;
+    border-bottom:2px solid #7afcff;
+  }
+
+  /* Panels */
+  .tabPanel {
+    display:none;
+    padding:10px 12px;
+  }
+  .tabPanel.active {
+    display:block;
+  }
+</style>
+
+<div id="navBar">
+  <button data-tab="tasksTab" class="active">🏠 Tasks</button>
+  <button data-tab="gameTab">⚔️ Battle</button>
+  <button data-tab="statsTab">📊 Stats</button>
+</div>
+
+<!-- === TABS CONTAINERS === -->
+<div id="tasksTab" class="tabPanel active">
+  <!-- 🏠 Put your Daily Task Tracker HTML here -->
+  <!-- (everything that includes your avatar, XP bar, checklist, mood panel, etc.) -->
+</div>
+
+<div id="gameTab" class="tabPanel">
+  <!-- ⚔️ Move your entire GamePanel HTML here -->
+  <!-- (the <div id="gamePanel"> ... </div> plus its <script>) -->
+</div>
+
+<div id="statsTab" class="tabPanel">
+  <!-- 📊 Optional: your Stats / Mood / Reflection / Skills panels -->
+</div>
+
+<script>
+/* === Tab Switching Logic === */
+const navButtons = document.querySelectorAll('#navBar button');
+const panels = document.querySelectorAll('.tabPanel');
+navButtons.forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const tab = btn.dataset.tab;
+    navButtons.forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    panels.forEach(p=>{
+      p.classList.toggle('active', p.id===tab);
+    });
+  });
+});
+</script>
   <h1>Aura Ascend</h1>
 
   <div id="hud">
