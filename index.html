@@ -758,6 +758,214 @@ function renderCharts(){
   });
 }
 </script>
+<!-- === ADD-ON: Phase 3 — Avatar Customization + Dynamic Day/Night Theme === -->
+<style>
+  #customizePanel{
+    margin-top:18px; background:#0f1122; border:1px solid #202a60; border-radius:12px;
+    padding:14px; text-align:left;
+  }
+  #customizePanel h3{color:var(--cyan); margin:0 0 10px}
+  .row{display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap}
+  .row label{min-width:90px}
+  .swatch{width:32px; height:32px; border-radius:8px; border:1px solid #2a3580; cursor:pointer}
+  .select{background:#0e1130; color:#e0e0ff; border:1px solid #202a60; border-radius:8px; padding:6px 8px}
+  .toggle{display:flex; align-items:center; gap:10px}
+  .note{opacity:.8; font-size:.9rem}
+</style>
+
+<div id="customizePanel" class="panel" style="max-width:1080px; margin:16px auto;">
+  <h3>🎨 Appearance & Theme</h3>
+
+  <div class="row">
+    <label>Hair</label>
+    <input type="color" id="hairColor" class="swatch" value="#ffd700" title="Hair Color">
+    <span class="note">Tip: warm blondes look great with gold aura.</span>
+  </div>
+
+  <div class="row">
+    <label>Eyes</label>
+    <input type="color" id="eyeColor" class="swatch" value="#00aaff" title="Eye Color">
+  </div>
+
+  <div class="row">
+    <label>Shirt</label>
+    <input type="color" id="shirtColor" class="swatch" value="#111111" title="Shirt Color">
+  </div>
+
+  <div class="row">
+    <label>Pants</label>
+    <input type="color" id="pantsColor" class="swatch" value="#1e90ff" title="Pants Color">
+  </div>
+
+  <hr style="border-color:#202a60;opacity:.4;margin:12px 0">
+
+  <div class="row toggle">
+    <input type="checkbox" id="autoTheme">
+    <label for="autoTheme"><b>Auto Theme by Time</b> (Morning / Day / Evening / Night)</label>
+  </div>
+
+  <div class="row">
+    <label>Manual Theme</label>
+    <select id="manualTheme" class="select">
+      <option value="morning">🌅 Morning</option>
+      <option value="day">☀️ Day</option>
+      <option value="evening">🌇 Evening</option>
+      <option value="night">🌙 Night</option>
+    </select>
+    <span class="note">Disabled while Auto Theme is on</span>
+  </div>
+</div>
+
+<script>
+/* =========================
+   Phase 3: Customization + Theme
+========================= */
+
+// Persisted settings
+let avatarStyle = JSON.parse(localStorage.getItem('avatarStyle') || '{}');
+let themePrefs   = JSON.parse(localStorage.getItem('themePrefs')   || '{"mode":"auto","manual":"evening"}');
+
+// DOM refs
+const hairEl  = document.getElementById('hairColor');
+const eyeEl   = document.getElementById('eyeColor');
+const shirtEl = document.getElementById('shirtColor');
+const pantsEl = document.getElementById('pantsColor');
+const autoEl  = document.getElementById('autoTheme');
+const manualEl= document.getElementById('manualTheme');
+
+// Apply avatar colors to current HTML avatar
+function applyAvatarStyle(){
+  const hairDiv  = document.querySelector('.hair');
+  const eyeDivs  = document.querySelectorAll('.eye');
+  const shirtDiv = document.querySelector('.body');
+  const pantsDiv = document.querySelector('.pants');
+
+  const hair = avatarStyle.hair  || hairEl.value;
+  const eyes = avatarStyle.eyes  || eyeEl.value;
+  const shirt= avatarStyle.shirt || shirtEl.value;
+  const pants= avatarStyle.pants || pantsEl.value;
+
+  // Hair uses a gradient to look shiny
+  hairDiv.style.background = `linear-gradient(135deg, ${hair} 0%, ${hair} 50%, ${shade(hair, -15)} 100%)`;
+
+  eyeDivs.forEach(e => { e.style.background = eyes; });
+  shirtDiv.style.background = shirt;
+  pantsDiv.style.background = pants;
+}
+
+// Simple color shade helper (hex ± %)
+function shade(hex, percent){
+  const v = parseInt(hex.replace('#',''),16);
+  let r=(v>>16)&255, g=(v>>8)&255, b=v&255;
+  r=Math.min(255,Math.max(0, Math.round(r*(100+percent)/100)));
+  g=Math.min(255,Math.max(0, Math.round(g*(100+percent)/100)));
+  b=Math.min(255,Math.max(0, Math.round(b*(100+percent)/100)));
+  return '#'+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);
+}
+
+// Time-of-day theme blocks
+const THEMES = {
+  morning: {
+    bg: 'radial-gradient(1200px 800px at 50% -10%, #1a1f3d 0%, #0b0f24 45%, #050510 100%)',
+    aura: 'radial-gradient(circle, rgba(255,214,165,0.55), transparent 70%)'
+  },
+  day: {
+    bg: 'radial-gradient(1200px 800px at 50% -10%, #14213d 0%, #0b0f2a 45%, #050510 100%)',
+    aura: 'radial-gradient(circle, rgba(255,215,0,0.60), transparent 70%)'
+  },
+  evening: {
+    bg: 'radial-gradient(1200px 800px at 50% -10%, #1b1035 0%, #0b0a1f 45%, #050510 100%)',
+    aura: 'radial-gradient(circle, rgba(255,120,200,0.55), transparent 70%)'
+  },
+  night: {
+    bg: 'radial-gradient(1200px 800px at 50% -10%, #0a0b15 0%, #060712 45%, #01020a 100%)',
+    aura: 'radial-gradient(circle, rgba(0,150,255,0.85), transparent 70%)'
+  }
+};
+
+// Pick theme by local time
+function timeOfDay(){
+  const h = new Date().getHours();
+  if (h >= 6 && h < 11) return 'morning';
+  if (h >= 11 && h < 18) return 'day';
+  if (h >= 18 && h < 22) return 'evening';
+  return 'night';
+}
+
+function applyTheme(){
+  const body = document.body;
+  const aura = document.getElementById('aura');
+  const mode = themePrefs.mode || 'auto';
+  const key  = mode === 'auto' ? timeOfDay() : (themePrefs.manual || 'evening');
+  const t    = THEMES[key];
+
+  body.style.background = t.bg;
+
+  // Let existing XP-intensity logic tint the aura, but base is theme aura:
+  aura.style.background = t.aura;
+
+  // Reapply XP overlay (keeps your aura progression behavior)
+  if (typeof updateHUD === 'function') { updateHUD(); }
+}
+
+// UI → state
+function bindCustomizeUI(){
+  // Prefill inputs from saved state or current DOM-derived values
+  hairEl.value  = avatarStyle.hair  || '#ffd700';
+  eyeEl.value   = avatarStyle.eyes  || '#00aaff';
+  shirtEl.value = avatarStyle.shirt || '#111111';
+  pantsEl.value = avatarStyle.pants || '#1e90ff';
+
+  autoEl.checked = (themePrefs.mode || 'auto') === 'auto';
+  manualEl.value = themePrefs.manual || 'evening';
+  manualEl.disabled = autoEl.checked;
+
+  // Listeners
+  hairEl.addEventListener('input', ()=>{
+    avatarStyle.hair = hairEl.value; localStorage.setItem('avatarStyle', JSON.stringify(avatarStyle)); applyAvatarStyle();
+  });
+  eyeEl.addEventListener('input', ()=>{
+    avatarStyle.eyes = eyeEl.value; localStorage.setItem('avatarStyle', JSON.stringify(avatarStyle)); applyAvatarStyle();
+  });
+  shirtEl.addEventListener('input', ()=>{
+    avatarStyle.shirt = shirtEl.value; localStorage.setItem('avatarStyle', JSON.stringify(avatarStyle)); applyAvatarStyle();
+  });
+  pantsEl.addEventListener('input', ()=>{
+    avatarStyle.pants = pantsEl.value; localStorage.setItem('avatarStyle', JSON.stringify(avatarStyle)); applyAvatarStyle();
+  });
+
+  autoEl.addEventListener('change', ()=>{
+    themePrefs.mode = autoEl.checked ? 'auto' : 'manual';
+    localStorage.setItem('themePrefs', JSON.stringify(themePrefs));
+    manualEl.disabled = autoEl.checked;
+    applyTheme();
+  });
+  manualEl.addEventListener('change', ()=>{
+    themePrefs.manual = manualEl.value;
+    localStorage.setItem('themePrefs', JSON.stringify(themePrefs));
+    applyTheme();
+  });
+}
+
+// Keep theme fresh every few minutes if Auto is on
+setInterval(()=>{ if ((themePrefs.mode||'auto')==='auto') applyTheme(); }, 5*60*1000);
+
+// Integrate with your existing daily rollover so morning theme snaps at 06:00
+const _ensureCycle_phase3 = ensureCycle;
+ensureCycle = function(){
+  const prev = savedCycleKey;
+  _ensureCycle_phase3();
+  if (prev && prev !== savedCycleKey){
+    // Day changed → reapply theme; users often see morning theme immediately
+    applyTheme();
+  }
+};
+
+// Boot
+bindCustomizeUI();
+applyAvatarStyle();
+applyTheme();
+</script>
 </body>
 </html>
 
